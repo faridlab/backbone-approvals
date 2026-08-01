@@ -1,0 +1,109 @@
+# =============================================================================
+# Domain: approvals
+# Entity: ApprovalRequest
+# Description: A workflow module's request for a human approval decision. The
+#              workflow creates this and gates its transition on the outcome
+#              instead of carrying its own status/approved_by. Owns the
+#              ApprovalStatus enum and reuses ApprovalPriority.
+#
+# Unique invariant: one LIVE request per (company_id, resource_type, resource_id)
+# — enforced via a partial unique index where deleted_at IS NULL (the DSL does
+# not support a status-based partial). A withdrawn/cancelled request must be
+# soft-deleted before a new request for the same resource can be filed; the
+# stricter "one PENDING" semantic is enforced at the application layer.
+# =============================================================================
+
+models:
+  - name: ApprovalRequest
+    collection: approval_requests
+    description: "A workflow's request for human approval — gates the workflow's transition."
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "# logical FK organization.Company.id"
+
+      resource_type:
+        type: ApprovalResourceType
+        attributes: ["@required"]
+        description: "Kind of workflow entity being approved"
+
+      resource_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "The thing being approved # logical FK to the workflow module's entity"
+
+      policy_id:
+        type: uuid?
+        attributes: ["@foreign_key(ApprovalPolicy.id)"]
+        description: "# FK approval_policies.id (in-module)"
+
+      requested_by:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Who asked for approval # logical FK employee.Employee.id"
+
+      status:
+        type: ApprovalStatus
+        attributes: ["@required", "@default(draft)"]
+        description: "draft/pending/approved/rejected/withdrawn/cancelled"
+
+      current_step:
+        type: integer?
+        description: "The step the chain is currently waiting on"
+
+      priority:
+        type: ApprovalPriority
+        attributes: ["@required", "@default(normal)"]
+        description: "low/normal/high/urgent"
+
+      submitted_at:
+        type: datetime?
+        description: "When draft -> pending"
+
+      decided_at:
+        type: datetime?
+        description: "When the chain reached a terminal decision"
+
+      decided_by:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Who made the terminal decision # logical FK employee.Employee.id"
+
+      summary:
+        type: json?
+        description: "Payload snapshot shown to the approver"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    indexes:
+      - type: index
+        fields: [company_id, status]
+      - type: index
+        fields: [requested_by]
+      - type: index
+        fields: [resource_type, resource_id]
+      # One LIVE chain per resource (soft-delete-scoped; see file header).
+      - type: unique
+        fields: [company_id, resource_type, resource_id]
+        where: "deleted_at IS NULL"
+
+enums:
+  - name: ApprovalStatus
+    description: "Lifecycle state of an approval request."
+    variants:
+      - name: draft
+        default: true
+      - name: pending
+      - name: approved
+      - name: rejected
+      - name: withdrawn
+      - name: cancelled

@@ -1,0 +1,73 @@
+# =============================================================================
+# Domain: approvals
+# Entity: Delegation
+# Description: An approver's delegation of approval authority for a window of
+#              time. At decision time, ApprovalStep.assigned_to resolves via
+#              active delegations. Owns the DelegationStatus enum.
+# =============================================================================
+
+models:
+  - name: Delegation
+    collection: delegations
+    description: "An approver's delegation of approval authority for a window of time."
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "# logical FK organization.Company.id"
+
+      approver_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "The delegating approver # logical FK employee.Employee.id"
+
+      delegate_to_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Who receives the authority # logical FK employee.Employee.id"
+
+      valid_from:
+        type: date
+        attributes: ["@required"]
+        description: "Delegation starts"
+
+      valid_to:
+        type: date
+        attributes: ["@required"]
+        description: "Delegation ends"
+
+      reason:
+        type: string?
+        attributes: ["@length(max=255)"]
+        description: "Why the delegation was made"
+
+      status:
+        type: DelegationStatus
+        attributes: ["@required", "@default(active)"]
+        description: "active/revoked"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    indexes:
+      - type: index
+        fields: [approver_id]
+      - type: index
+        fields: [delegate_to_id]
+      - type: index
+        fields: [company_id, status]
+
+enums:
+  - name: DelegationStatus
+    description: "Whether a delegation is currently in effect."
+    variants:
+      - name: active
+        default: true
+      - name: revoked

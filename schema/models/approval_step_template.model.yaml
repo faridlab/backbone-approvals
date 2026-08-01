@@ -1,0 +1,73 @@
+# =============================================================================
+# Domain: approvals
+# Entity: ApprovalStepTemplate
+# Description: Ordered approver template within a policy — step_no, the approver
+#              resolution kind, optional specific ref, SLA, and quorum/consensus
+#              rules. Owns the ApproverKind enum (reused by ApprovalStep).
+# =============================================================================
+
+models:
+  - name: ApprovalStepTemplate
+    collection: approval_step_templates
+    description: "Ordered approver template within a policy (step_no, approver kind, SLA)."
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "# logical FK organization.Company.id"
+
+      policy_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(ApprovalPolicy.id)"]
+        description: "# FK approval_policies.id (in-module)"
+
+      step_no:
+        type: integer
+        attributes: ["@required"]
+        description: "1-based position in the chain"
+
+      approver_kind:
+        type: ApproverKind
+        attributes: ["@required"]
+        description: "How the approver is resolved"
+
+      approver_ref:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Specific employee/role/position id # logical FK (employee/organization)"
+
+      sla_hours:
+        type: integer?
+        description: "Hours before this step is overdue (drives sla_due_at)"
+
+      all_of:
+        type: json?
+        description: "Quorum/consensus rules (e.g. all must approve, or N of M)"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    indexes:
+      - type: index
+        fields: [policy_id]
+      - type: unique
+        fields: [policy_id, step_no]
+        where: "deleted_at IS NULL"
+
+enums:
+  - name: ApproverKind
+    description: "How an approver is resolved for a step."
+    variants:
+      - name: specific_employee
+        default: true
+      - name: manager_of_requester
+      - name: department_head
+      - name: role
+      - name: position

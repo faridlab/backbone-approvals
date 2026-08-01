@@ -1,0 +1,91 @@
+# =============================================================================
+# Domain: approvals
+# Entity: ApprovalStep
+# Description: A concrete step instance on a request — the assigned approver,
+#              its status, the delegation chain, and SLA deadline. Owns the
+#              ApprovalStepStatus enum and reuses ApproverKind.
+# =============================================================================
+
+models:
+  - name: ApprovalStep
+    collection: approval_steps
+    description: "A concrete step instance on a request (assigned approver, status, SLA)."
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "# logical FK organization.Company.id"
+
+      request_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(ApprovalRequest.id)"]
+        description: "# FK approval_requests.id (in-module)"
+
+      step_no:
+        type: integer
+        attributes: ["@required"]
+        description: "Position in the chain (matches the template)"
+
+      approver_kind:
+        type: ApproverKind
+        attributes: ["@required"]
+        description: "How the approver was resolved"
+
+      assigned_to:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Who must decide this step # logical FK employee.Employee.id"
+
+      delegated_from:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Original approver if delegated # logical FK employee.Employee.id"
+
+      status:
+        type: ApprovalStepStatus
+        attributes: ["@required", "@default(pending)"]
+        description: "pending/approved/rejected/delegated/skipped/escalated"
+
+      acted_at:
+        type: datetime?
+        description: "When the step was decided"
+
+      comment:
+        type: string?
+        attributes: ["@length(max=500)"]
+        description: "Approver's comment on the decision"
+
+      sla_due_at:
+        type: datetime?
+        description: "Deadline before the step is overdue (escalation trigger)"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    indexes:
+      - type: index
+        fields: [request_id]
+      - type: index
+        fields: [assigned_to, status]
+      - type: unique
+        fields: [request_id, step_no]
+        where: "deleted_at IS NULL"
+
+enums:
+  - name: ApprovalStepStatus
+    description: "Lifecycle state of a single approval step."
+    variants:
+      - name: pending
+        default: true
+      - name: approved
+      - name: rejected
+      - name: delegated
+      - name: skipped
+      - name: escalated

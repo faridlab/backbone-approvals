@@ -1,0 +1,81 @@
+# =============================================================================
+# Domain: approvals
+# Entity: ApprovalPolicy
+# Description: An approval policy per resource type — defines the ordered chain
+#              of approval steps a workflow module must walk to get a decision.
+#              Owns the ApprovalResourceType enum (reused by ApprovalRequest).
+# =============================================================================
+
+models:
+  - name: ApprovalPolicy
+    collection: approval_policies
+    description: "Approval policy per resource type — defines the chain of approval steps."
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+
+      company_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "# logical FK organization.Company.id"
+
+      resource_type:
+        type: ApprovalResourceType
+        attributes: ["@required"]
+        description: "promotion/onboarding/offboarding/clearance/leave/timesheet/offer/appraisal/custom"
+
+      name:
+        type: string
+        attributes: ["@required", "@length(max=120)"]
+        description: "Human label for this policy"
+
+      is_active:
+        type: boolean
+        attributes: ["@default(true)"]
+        description: "Only active policies are matched for new requests"
+
+      description:
+        type: string?
+        attributes: ["@length(max=255)"]
+        description: "Optional long-form description"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata"
+
+    indexes:
+      - type: index
+        fields: [company_id]
+      - type: index
+        fields: [company_id, resource_type]
+      - type: unique
+        fields: [company_id, resource_type, name]
+        where: "deleted_at IS NULL"
+
+enums:
+  - name: ApprovalResourceType
+    description: "The workflow entity kind an approval gates."
+    variants:
+      - name: promotion
+      - name: onboarding
+      - name: onboarding_task
+      - name: offboarding
+      - name: clearance
+      - name: leave
+      - name: timesheet
+      - name: offer
+      - name: appraisal
+      - name: custom
+        default: true
+
+  - name: ApprovalPriority
+    description: "Priority of an approval request (drives SLA / escalation)."
+    variants:
+      - name: low
+      - name: normal
+        default: true
+      - name: high
+      - name: urgent
