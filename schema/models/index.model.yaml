@@ -12,6 +12,10 @@
 module: approvals
 version: 2
 schema: approvals
+
+# ADR-0014 company fence (Wave 1 P0 sweep, 2026-08-16): the approval spine is company-private: policies, requests, steps, and
+# delegations never cross companies (pillar-hrms H-9).
+company_fence: strict
 description: "the approval spine — requests, multi-step chains, delegation, SLA"
 
 config:
