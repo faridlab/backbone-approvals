@@ -14,6 +14,13 @@ pub mod approval_step_template_service;
 pub mod delegation_service;
 
 // <<< CUSTOM
+// The decision engine: file/decide/status/withdraw over the request+step rows the
+// generated CRUD only moves. Hand-authored (see metaphor.codegen.yaml user_owned).
+pub mod approvals_write_service;
+pub use approvals_write_service::{
+    ApprovalsError, ApprovalsWriteService, ApproverActor, ApproverResolver, Decision,
+    FailClosedResolver, FileFiling, FilingOutcome,
+};
 // END CUSTOM
 
 pub use approval_policy_service::ApprovalPolicyService;

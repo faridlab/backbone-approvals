@@ -12,6 +12,9 @@ mod delegation_repository;
 
 // Custom persistence modules
 // <<< CUSTOM
+// The decision engine's statements (hand-authored; see metaphor.codegen.yaml user_owned).
+pub mod approvals_write_repository;
+pub use approvals_write_repository::ApprovalsWriteRepository;
 // END CUSTOM
 
 // Re-exports
@@ -23,9 +26,8 @@ pub use delegation_repository::DelegationRepository;
 
 // Re-export backbone-orm types
 pub use backbone_orm::repository::{
-    DatabaseOperations, PostgresRepository,
-    PaginationParams, PaginationInfo, PaginatedResult,
-    FilterParams, FilterCondition, SortParams, SortDirection,
+    DatabaseOperations, FilterCondition, FilterParams, PaginatedResult, PaginationInfo,
+    PaginationParams, PostgresRepository, SortDirection, SortParams,
 };
 
 // Re-export custom persistence types

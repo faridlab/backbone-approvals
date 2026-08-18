@@ -11,14 +11,14 @@
 # Add your hand-authored services, handlers, tests, and docs below as you write them.
 
 user_owned:
-  # Hand-authored behavior (services + their HTTP surface). Examples:
-  # - "src/application/service/onboarding_service.rs"
-  # - "src/presentation/http/guarded_routes.rs"
+  # Hand-authored behavior: the decision engine (service + repository) and its HTTP surface.
+  - "src/application/service/approvals_write_service.rs"
+  - "src/infrastructure/persistence/approvals_write_repository.rs"
+  - "src/presentation/http/guarded_routes.rs"
 
   # Behavior tests (the golden cases / oracle) + BDD features.
   - "tests/features/**"
-  # - "tests/*_golden_cases.rs"
-  # - "tests/integrity_probes.rs"
+  - "tests/integrity_probes.rs"
 
   # Hand-authored module documentation.
   - "docs/**"

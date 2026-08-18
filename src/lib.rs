@@ -18,12 +18,12 @@
 #![allow(unused_imports)]
 
 // Generated modules
-pub mod domain;
-pub mod infrastructure;
 pub mod application;
+pub mod domain;
+pub mod exports;
+pub mod infrastructure;
 pub mod presentation;
 pub mod seeders;
-pub mod exports;
 
 // Re-exports for convenience - Domain entities
 pub use domain::entity::*;
@@ -41,9 +41,16 @@ pub use application::service::DelegationService;
 // Re-exports - Workflows
 pub use application::workflows::*;
 
-use std::sync::Arc;
+// <<< CUSTOM
+// The guarded composition (operator CRUD + engine reads + decide/withdraw verbs).
+pub use presentation::http::guarded_routes::{
+    create_guarded_approvals_routes, create_guarded_approvals_routes_with,
+};
+// END CUSTOM
+
 use axum::Router;
 use sqlx::PgPool;
+use std::sync::Arc;
 
 /// Approvals module configuration
 ///
@@ -64,6 +71,9 @@ pub struct ApprovalsModule {
     pub(crate) approval_step_template_service: Arc<ApprovalStepTemplateService>,
     pub(crate) delegation_service: Arc<DelegationService>,
     // <<< CUSTOM FIELDS
+    // The decision engine (file/decide/status/withdraw). Default resolver is fail-closed:
+    // dynamic approver kinds need the host to supply one at composition time.
+    pub(crate) approvals_write_service: Arc<application::service::ApprovalsWriteService>,
     // END CUSTOM
 }
 
@@ -80,18 +90,24 @@ impl ApprovalsModule {
     /// real deployment; use this only in trusted/admin/seeding contexts.
     pub fn all_crud_routes(&self) -> Router {
         use presentation::http::{
-            create_approval_policy_routes,
-            create_approval_request_routes,
-            create_approval_step_routes,
-            create_approval_step_template_routes,
+            create_approval_policy_routes, create_approval_request_routes,
+            create_approval_step_routes, create_approval_step_template_routes,
             create_delegation_routes,
         };
 
         Router::new()
-            .merge(create_approval_policy_routes(self.approval_policy_service.clone()))
-            .merge(create_approval_request_routes(self.approval_request_service.clone()))
-            .merge(create_approval_step_routes(self.approval_step_service.clone()))
-            .merge(create_approval_step_template_routes(self.approval_step_template_service.clone()))
+            .merge(create_approval_policy_routes(
+                self.approval_policy_service.clone(),
+            ))
+            .merge(create_approval_request_routes(
+                self.approval_request_service.clone(),
+            ))
+            .merge(create_approval_step_routes(
+                self.approval_step_service.clone(),
+            ))
+            .merge(create_approval_step_template_routes(
+                self.approval_step_template_service.clone(),
+            ))
             .merge(create_delegation_routes(self.delegation_service.clone()))
     }
 
@@ -100,10 +116,60 @@ impl ApprovalsModule {
     /// mount exposes unguarded writes. Compose a guarded router (read + validated
     /// writes) for production, or call `all_crud_routes()` to opt into the full
     /// unguarded surface explicitly.
-    #[deprecated(note = "mounts unvalidated generic CRUD on every entity; compose a guarded router for production, or call all_crud_routes() for the intentional full/unguarded surface")]
+    #[deprecated(
+        note = "mounts unvalidated generic CRUD; prefer readonly_routes() + validated writes, or all_crud_routes() for the full/unguarded surface"
+    )]
     pub fn routes(&self) -> Router {
         self.all_crud_routes()
     }
+
+    /// Read-only routes for every entity (GET endpoints only) — the safe base.
+    ///
+    /// Generic mutation can't reach here, so this surface cannot bypass a
+    /// validated write service's invariants. Use this as the production base and
+    /// merge validated write routes (or a write service's HTTP layer) onto it.
+    pub fn readonly_routes(&self) -> Router {
+        use presentation::http::{
+            create_approval_policy_read_routes, create_approval_request_read_routes,
+            create_approval_step_read_routes, create_approval_step_template_read_routes,
+            create_delegation_read_routes,
+        };
+
+        Router::new()
+            .merge(create_approval_policy_read_routes(
+                self.approval_policy_service.clone(),
+            ))
+            .merge(create_approval_request_read_routes(
+                self.approval_request_service.clone(),
+            ))
+            .merge(create_approval_step_read_routes(
+                self.approval_step_service.clone(),
+            ))
+            .merge(create_approval_step_template_read_routes(
+                self.approval_step_template_service.clone(),
+            ))
+            .merge(create_delegation_read_routes(
+                self.delegation_service.clone(),
+            ))
+    }
+
+    // <<< CUSTOM METHODS
+    /// The decision engine held by this module (default fail-closed resolver).
+    pub fn approvals_write_service(&self) -> Arc<application::service::ApprovalsWriteService> {
+        self.approvals_write_service.clone()
+    }
+
+    /// Replace the engine at the composition root — the way a host supplies a real
+    /// approver resolver for the dynamic kinds. Call before mounting routes; the module is
+    /// consumed once at startup.
+    pub fn with_approvals_write_service(
+        mut self,
+        svc: Arc<application::service::ApprovalsWriteService>,
+    ) -> Self {
+        self.approvals_write_service = svc;
+        self
+    }
+    // END CUSTOM
 }
 
 /// Builder for ApprovalsModule
@@ -114,9 +180,7 @@ pub struct ApprovalsModuleBuilder {
 impl ApprovalsModuleBuilder {
     /// Create a new builder
     pub fn new() -> Self {
-        Self {
-            db_pool: None,
-        }
+        Self { db_pool: None }
     }
 
     /// Set the database connection pool
@@ -130,30 +194,45 @@ impl ApprovalsModuleBuilder {
 
     /// Build the module with configured dependencies
     pub fn build(self) -> anyhow::Result<ApprovalsModule> {
-        let db_pool = self.db_pool
+        let db_pool = self
+            .db_pool
             .ok_or_else(|| anyhow::anyhow!("Database pool not configured"))?;
 
         // ApprovalPolicy service
         let approval_policy_repository = Arc::new(ApprovalPolicyRepository::new(db_pool.clone()));
-        let approval_policy_service = Arc::new(ApprovalPolicyService::with_repository(approval_policy_repository.clone()));
+        let approval_policy_service = Arc::new(ApprovalPolicyService::with_repository(
+            approval_policy_repository.clone(),
+        ));
 
         // ApprovalRequest service
         let approval_request_repository = Arc::new(ApprovalRequestRepository::new(db_pool.clone()));
-        let approval_request_service = Arc::new(ApprovalRequestService::with_repository(approval_request_repository.clone()));
+        let approval_request_service = Arc::new(ApprovalRequestService::with_repository(
+            approval_request_repository.clone(),
+        ));
 
         // ApprovalStep service
         let approval_step_repository = Arc::new(ApprovalStepRepository::new(db_pool.clone()));
-        let approval_step_service = Arc::new(ApprovalStepService::with_repository(approval_step_repository.clone()));
+        let approval_step_service = Arc::new(ApprovalStepService::with_repository(
+            approval_step_repository.clone(),
+        ));
 
         // ApprovalStepTemplate service
-        let approval_step_template_repository = Arc::new(ApprovalStepTemplateRepository::new(db_pool.clone()));
-        let approval_step_template_service = Arc::new(ApprovalStepTemplateService::with_repository(approval_step_template_repository.clone()));
+        let approval_step_template_repository =
+            Arc::new(ApprovalStepTemplateRepository::new(db_pool.clone()));
+        let approval_step_template_service = Arc::new(
+            ApprovalStepTemplateService::with_repository(approval_step_template_repository.clone()),
+        );
 
         // Delegation service
         let delegation_repository = Arc::new(DelegationRepository::new(db_pool.clone()));
-        let delegation_service = Arc::new(DelegationService::with_repository(delegation_repository.clone()));
+        let delegation_service = Arc::new(DelegationService::with_repository(
+            delegation_repository.clone(),
+        ));
 
         // <<< CUSTOM
+        let approvals_write_service = Arc::new(application::service::ApprovalsWriteService::new(
+            db_pool.clone(),
+        ));
         // END CUSTOM
 
         Ok(ApprovalsModule {
@@ -163,6 +242,7 @@ impl ApprovalsModuleBuilder {
             approval_step_template_service,
             delegation_service,
             // <<< CUSTOM
+            approvals_write_service,
             // END CUSTOM
         })
     }
