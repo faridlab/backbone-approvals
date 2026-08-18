@@ -36,6 +36,11 @@ models:
         attributes: ["@required"]
         description: "How the approver was resolved"
 
+      approver_ref:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "The template's reference (employee/role/position id) this row was resolved FROM — authorization re-checks it at decide time (role steps) # logical FK (employee/organization)"
+
       assigned_to:
         type: uuid
         attributes: ["@required", "@exclude_from_foreign_key_check"]
@@ -75,7 +80,7 @@ models:
       - type: index
         fields: [assigned_to, status]
       - type: unique
-        fields: [request_id, step_no]
+        fields: [request_id, step_no, assigned_to]
         where: "deleted_at IS NULL"
 
 enums:

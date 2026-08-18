@@ -28,6 +28,7 @@ impl TestDataGenerator for ApprovalStepTestData {
             "request_id": Uuid::new_v4().to_string(),
             "step_no": 1,
             "approver_kind": "specific_employee",
+            "approver_ref": null,
             "assigned_to": Uuid::new_v4().to_string(),
             "delegated_from": null,
             "status": "pending",
@@ -46,6 +47,7 @@ impl TestDataGenerator for ApprovalStepTestData {
             "request_id": Uuid::new_v4().to_string(),
             "step_no": 1,
             "approver_kind": "specific_employee",
+            "approver_ref": null,
             "assigned_to": Uuid::new_v4().to_string(),
             "delegated_from": null,
             "status": "pending",
@@ -64,7 +66,13 @@ impl TestDataGenerator for ApprovalStepTestData {
 
     async fn seed_dependencies(&self, api: &ApiTest) -> Vec<(String, String)> {
         let mut deps: Vec<(String, String)> = Vec::new();
-        if let Some(id) = super::crud_test_base::create_and_get_id(api, "/api/v1/approval_requests", &super::approval_request_api_test::ApprovalRequestTestData).await {
+        if let Some(id) = super::crud_test_base::create_and_get_id(
+            api,
+            "/api/v1/approval_requests",
+            &super::approval_request_api_test::ApprovalRequestTestData,
+        )
+        .await
+        {
             deps.push(("request_id".to_string(), id));
         }
         deps

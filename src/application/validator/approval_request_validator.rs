@@ -5,8 +5,8 @@
 //! Returns an `EntityValidator<ApprovalRequest>` pre-loaded with schema-derived
 //! field rules. Extend in the `// <<< CUSTOM` zone.
 
-use backbone_core::{EntityValidator, ValidationErrors, ValidationError};
 use crate::domain::entity::ApprovalRequest;
+use backbone_core::{EntityValidator, ValidationError, ValidationErrors};
 
 /// Validator type alias for ApprovalRequest entities.
 pub type ApprovalRequestValidator = EntityValidator<ApprovalRequest>;
@@ -16,7 +16,7 @@ pub fn approval_request_validator() -> ApprovalRequestValidator {
     EntityValidator::new()
     // <<< CUSTOM RULES
     // END CUSTOM RULES
-        // No schema-derived rules — add custom rules above.
+    // No schema-derived rules — add custom rules above.
 }
 
 // <<< CUSTOM

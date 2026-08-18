@@ -5,8 +5,8 @@
 //! Returns an `EntityValidator<ApprovalStepTemplate>` pre-loaded with schema-derived
 //! field rules. Extend in the `// <<< CUSTOM` zone.
 
-use backbone_core::{EntityValidator, ValidationErrors, ValidationError};
 use crate::domain::entity::ApprovalStepTemplate;
+use backbone_core::{EntityValidator, ValidationError, ValidationErrors};
 
 /// Validator type alias for ApprovalStepTemplate entities.
 pub type ApprovalStepTemplateValidator = EntityValidator<ApprovalStepTemplate>;
@@ -16,7 +16,7 @@ pub fn approval_step_template_validator() -> ApprovalStepTemplateValidator {
     EntityValidator::new()
     // <<< CUSTOM RULES
     // END CUSTOM RULES
-        // No schema-derived rules — add custom rules above.
+    // No schema-derived rules — add custom rules above.
 }
 
 // <<< CUSTOM

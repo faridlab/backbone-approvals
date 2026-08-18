@@ -23,13 +23,14 @@ use backbone_approvals::seeders::Seeder;
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let force = args.iter().any(|a| a == "--force");
-    let filter: Option<&str> = args.iter()
+    let filter: Option<&str> = args
+        .iter()
         .skip(1)
         .find(|a| !a.starts_with("-"))
         .map(|s| s.as_str());
 
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url =
+        env::var("DATABASE_URL").map_err(|e| anyhow::anyhow!("DATABASE_URL must be set: {e}"))?;
 
     println!("Connecting to database...");
 

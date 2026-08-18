@@ -70,6 +70,7 @@ enums:
       - name: appraisal
       - name: custom
         default: true
+      - name: expense
 
   - name: ApprovalPriority
     description: "Priority of an approval request (drives SLA / escalation)."

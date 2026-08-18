@@ -5,8 +5,8 @@
 //! This trait defines the repository contract for the ApprovalStepTemplate aggregate.
 //! Implementation is in the infrastructure layer.
 
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::domain::entity::{ApprovalStepTemplate, ApproverKind};
@@ -53,7 +53,10 @@ pub struct ApprovalStepTemplateFilter {
 impl ApprovalStepTemplateFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some() || self.policy_id.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some()
+        self.company_id.is_some()
+            || self.policy_id.is_some()
+            || self.approver_kind.is_some()
+            || self.approver_ref.is_some()
     }
 }
 
@@ -63,7 +66,6 @@ impl ApprovalStepTemplateFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait ApprovalStepTemplateRepository: Send + Sync {
-
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -78,7 +80,11 @@ pub trait ApprovalStepTemplateRepository: Send + Sync {
     async fn find_all(&self) -> Result<Vec<ApprovalStepTemplate>>;
 
     /// Update approval_step_template by ID
-    async fn update(&self, id: &str, entity: &ApprovalStepTemplate) -> Result<Option<ApprovalStepTemplate>>;
+    async fn update(
+        &self,
+        id: &str,
+        entity: &ApprovalStepTemplate,
+    ) -> Result<Option<ApprovalStepTemplate>>;
 
     /// Delete approval_step_template by ID
     async fn delete(&self, id: &str) -> Result<bool>;
@@ -88,10 +94,17 @@ pub trait ApprovalStepTemplateRepository: Send + Sync {
     // =========================================================================
 
     /// List approval_step_template with pagination
-    async fn list(&self, params: ApprovalStepTemplatePaginationParams) -> Result<ApprovalStepTemplatePaginatedResult>;
+    async fn list(
+        &self,
+        params: ApprovalStepTemplatePaginationParams,
+    ) -> Result<ApprovalStepTemplatePaginatedResult>;
 
     /// List approval_step_template with pagination and filters
-    async fn list_with_filters(&self, params: ApprovalStepTemplatePaginationParams, filters: ApprovalStepTemplateFilter) -> Result<ApprovalStepTemplatePaginatedResult>;
+    async fn list_with_filters(
+        &self,
+        params: ApprovalStepTemplatePaginationParams,
+        filters: ApprovalStepTemplateFilter,
+    ) -> Result<ApprovalStepTemplatePaginatedResult>;
 
     /// Count all approval_step_template entities
     async fn count(&self) -> Result<u64>;
@@ -113,7 +126,10 @@ pub trait ApprovalStepTemplateRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<ApprovalStepTemplate>>;
 
     /// List soft-deleted approval_step_template entities
-    async fn list_deleted(&self, params: ApprovalStepTemplatePaginationParams) -> Result<ApprovalStepTemplatePaginatedResult>;
+    async fn list_deleted(
+        &self,
+        params: ApprovalStepTemplatePaginationParams,
+    ) -> Result<ApprovalStepTemplatePaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;
@@ -123,7 +139,10 @@ pub trait ApprovalStepTemplateRepository: Send + Sync {
     // =========================================================================
 
     /// Bulk save approval_step_template entities
-    async fn bulk_save(&self, entities: &[ApprovalStepTemplate]) -> Result<Vec<ApprovalStepTemplate>>;
+    async fn bulk_save(
+        &self,
+        entities: &[ApprovalStepTemplate],
+    ) -> Result<Vec<ApprovalStepTemplate>>;
 
     /// Bulk delete by IDs
     async fn bulk_delete(&self, ids: &[&str]) -> Result<u64>;

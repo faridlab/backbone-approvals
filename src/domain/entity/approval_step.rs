@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use super::ApproverKind;
 use super::ApprovalStepStatus;
+use super::ApproverKind;
 use super::AuditMetadata;
 
 /// Strongly-typed ID for ApprovalStep
@@ -13,9 +13,15 @@ use super::AuditMetadata;
 pub struct ApprovalStepId(pub Uuid);
 
 impl ApprovalStepId {
-    pub fn new(id: Uuid) -> Self { Self(id) }
-    pub fn generate() -> Self { Self(Uuid::new_v4()) }
-    pub fn into_inner(self) -> Uuid { self.0 }
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+    pub fn generate() -> Self {
+        Self(Uuid::new_v4())
+    }
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for ApprovalStepId {
@@ -32,20 +38,28 @@ impl std::str::FromStr for ApprovalStepId {
 }
 
 impl From<Uuid> for ApprovalStepId {
-    fn from(id: Uuid) -> Self { Self(id) }
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
 }
 
 impl From<ApprovalStepId> for Uuid {
-    fn from(id: ApprovalStepId) -> Self { id.0 }
+    fn from(id: ApprovalStepId) -> Self {
+        id.0
+    }
 }
 
 impl AsRef<Uuid> for ApprovalStepId {
-    fn as_ref(&self) -> &Uuid { &self.0 }
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
 }
 
 impl std::ops::Deref for ApprovalStepId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -55,6 +69,7 @@ pub struct ApprovalStep {
     pub request_id: Uuid,
     pub step_no: i32,
     pub approver_kind: ApproverKind,
+    pub approver_ref: Option<Uuid>,
     pub assigned_to: Uuid,
     pub delegated_from: Option<Uuid>,
     pub status: ApprovalStepStatus,
@@ -69,17 +84,25 @@ pub struct ApprovalStep {
 impl ApprovalStep {
     /// Create a builder for ApprovalStep
     pub fn builder() -> ApprovalStepBuilder {
-        ApprovalStepBuilder::default()
+        <ApprovalStepBuilder as Default>::default()
     }
 
     /// Create a new ApprovalStep with required fields
-    pub fn new(company_id: Uuid, request_id: Uuid, step_no: i32, approver_kind: ApproverKind, assigned_to: Uuid, status: ApprovalStepStatus) -> Self {
+    pub fn new(
+        company_id: Uuid,
+        request_id: Uuid,
+        step_no: i32,
+        approver_kind: ApproverKind,
+        assigned_to: Uuid,
+        status: ApprovalStepStatus,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             company_id,
             request_id,
             step_no,
             approver_kind,
+            approver_ref: None,
             assigned_to,
             delegated_from: None,
             status,
@@ -145,10 +168,15 @@ impl ApprovalStep {
         &self.status
     }
 
-
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
+
+    /// Set the approver_ref field (chainable)
+    pub fn with_approver_ref(mut self, value: Uuid) -> Self {
+        self.approver_ref = Some(value);
+        self
+    }
 
     /// Set the delegated_from field (chainable)
     pub fn with_delegated_from(mut self, value: Uuid) -> Self {
@@ -183,34 +211,59 @@ impl ApprovalStep {
         for (key, value) in fields {
             match key.as_str() {
                 "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.company_id = v;
+                    }
                 }
                 "request_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.request_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.request_id = v;
+                    }
                 }
                 "step_no" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.step_no = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.step_no = v;
+                    }
                 }
                 "approver_kind" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.approver_kind = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.approver_kind = v;
+                    }
+                }
+                "approver_ref" => {
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.approver_ref = v;
+                    }
                 }
                 "assigned_to" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.assigned_to = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.assigned_to = v;
+                    }
                 }
                 "delegated_from" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.delegated_from = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.delegated_from = v;
+                    }
                 }
                 "status" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.status = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.status = v;
+                    }
                 }
                 "acted_at" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.acted_at = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.acted_at = v;
+                    }
                 }
                 "comment" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.comment = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.comment = v;
+                    }
                 }
                 "sla_due_at" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.sla_due_at = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.sla_due_at = v;
+                    }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -290,6 +343,7 @@ pub struct ApprovalStepBuilder {
     request_id: Option<Uuid>,
     step_no: Option<i32>,
     approver_kind: Option<ApproverKind>,
+    approver_ref: Option<Uuid>,
     assigned_to: Option<Uuid>,
     delegated_from: Option<Uuid>,
     status: Option<ApprovalStepStatus>,
@@ -320,6 +374,12 @@ impl ApprovalStepBuilder {
     /// Set the approver_kind field (required)
     pub fn approver_kind(mut self, value: ApproverKind) -> Self {
         self.approver_kind = Some(value);
+        self
+    }
+
+    /// Set the approver_ref field (optional)
+    pub fn approver_ref(mut self, value: Uuid) -> Self {
+        self.approver_ref = Some(value);
         self
     }
 
@@ -363,11 +423,21 @@ impl ApprovalStepBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<ApprovalStep, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
-        let request_id = self.request_id.ok_or_else(|| "request_id is required".to_string())?;
-        let step_no = self.step_no.ok_or_else(|| "step_no is required".to_string())?;
-        let approver_kind = self.approver_kind.ok_or_else(|| "approver_kind is required".to_string())?;
-        let assigned_to = self.assigned_to.ok_or_else(|| "assigned_to is required".to_string())?;
+        let company_id = self
+            .company_id
+            .ok_or_else(|| "company_id is required".to_string())?;
+        let request_id = self
+            .request_id
+            .ok_or_else(|| "request_id is required".to_string())?;
+        let step_no = self
+            .step_no
+            .ok_or_else(|| "step_no is required".to_string())?;
+        let approver_kind = self
+            .approver_kind
+            .ok_or_else(|| "approver_kind is required".to_string())?;
+        let assigned_to = self
+            .assigned_to
+            .ok_or_else(|| "assigned_to is required".to_string())?;
 
         Ok(ApprovalStep {
             id: Uuid::new_v4(),
@@ -375,9 +445,10 @@ impl ApprovalStepBuilder {
             request_id,
             step_no,
             approver_kind,
+            approver_ref: self.approver_ref,
             assigned_to,
             delegated_from: self.delegated_from,
-            status: self.status.unwrap_or(ApprovalStepStatus::default()),
+            status: self.status.unwrap_or_default(),
             acted_at: self.acted_at,
             comment: self.comment,
             sla_due_at: self.sla_due_at,

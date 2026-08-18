@@ -13,44 +13,25 @@ pub mod delegation_dto;
 
 // Re-exports
 pub use approval_policy_dto::{
-    CreateApprovalPolicyDto,
-    UpdateApprovalPolicyDto,
-    PatchApprovalPolicyDto,
-    ApprovalPolicyResponseDto,
-    ApprovalPolicyListResponseDto,
-    ApprovalPolicySummaryDto,
+    ApprovalPolicyListResponseDto, ApprovalPolicyResponseDto, ApprovalPolicySummaryDto,
+    CreateApprovalPolicyDto, PatchApprovalPolicyDto, UpdateApprovalPolicyDto,
 };
 pub use approval_request_dto::{
-    CreateApprovalRequestDto,
-    UpdateApprovalRequestDto,
-    PatchApprovalRequestDto,
-    ApprovalRequestResponseDto,
-    ApprovalRequestListResponseDto,
-    ApprovalRequestSummaryDto,
+    ApprovalRequestListResponseDto, ApprovalRequestResponseDto, ApprovalRequestSummaryDto,
+    CreateApprovalRequestDto, PatchApprovalRequestDto, UpdateApprovalRequestDto,
 };
 pub use approval_step_dto::{
-    CreateApprovalStepDto,
-    UpdateApprovalStepDto,
-    PatchApprovalStepDto,
-    ApprovalStepResponseDto,
-    ApprovalStepListResponseDto,
-    ApprovalStepSummaryDto,
+    ApprovalStepListResponseDto, ApprovalStepResponseDto, ApprovalStepSummaryDto,
+    CreateApprovalStepDto, PatchApprovalStepDto, UpdateApprovalStepDto,
 };
 pub use approval_step_template_dto::{
-    CreateApprovalStepTemplateDto,
+    ApprovalStepTemplateListResponseDto, ApprovalStepTemplateResponseDto,
+    ApprovalStepTemplateSummaryDto, CreateApprovalStepTemplateDto, PatchApprovalStepTemplateDto,
     UpdateApprovalStepTemplateDto,
-    PatchApprovalStepTemplateDto,
-    ApprovalStepTemplateResponseDto,
-    ApprovalStepTemplateListResponseDto,
-    ApprovalStepTemplateSummaryDto,
 };
 pub use delegation_dto::{
-    CreateDelegationDto,
-    UpdateDelegationDto,
-    PatchDelegationDto,
-    DelegationResponseDto,
-    DelegationListResponseDto,
-    DelegationSummaryDto,
+    CreateDelegationDto, DelegationListResponseDto, DelegationResponseDto, DelegationSummaryDto,
+    PatchDelegationDto, UpdateDelegationDto,
 };
 
 // Common pagination types
@@ -76,8 +57,12 @@ pub struct PaginationParams {
     pub sort_order: Option<String>,
 }
 
-fn default_page() -> u32 { 1 }
-fn default_per_page() -> u32 { 20 }
+fn default_page() -> u32 {
+    1
+}
+fn default_per_page() -> u32 {
+    20
+}
 
 /// API response wrapper
 #[derive(Debug, Clone, Serialize)]
@@ -102,7 +87,11 @@ pub struct ApiError {
 
 impl<T> ApiResponse<T> {
     pub fn ok(data: T) -> Self {
-        Self { success: true, data: Some(data), error: None }
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
     }
 
     pub fn err(code: impl Into<String>, message: impl Into<String>) -> Self {

@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Router;
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{NaiveDate};
 
 // Backbone framework imports
 use backbone_core::http::BackboneCrudHandler;
@@ -22,12 +22,13 @@ use backbone_auth::middleware::AuthContext;
 use backbone_auth::AuthMiddleware;
 
 // Domain imports
-use crate::domain::entity::*;
 use crate::application::service::{DelegationService, ServiceError};
+use crate::domain::entity::*;
 
 // DTO imports
-use crate::presentation::dto::{CreateDelegationDto, UpdateDelegationDto, PatchDelegationDto, DelegationResponseDto};
-
+use crate::presentation::dto::{
+    CreateDelegationDto, DelegationResponseDto, PatchDelegationDto, UpdateDelegationDto,
+};
 
 /// Application error type
 #[derive(Debug, thiserror::Error)]
@@ -62,8 +63,14 @@ impl axum::response::IntoResponse for DelegationError {
         let (status, code) = match &self {
             Self::NotFound(_) => (StatusCode::NOT_FOUND, "DELEGATION_NOT_FOUND"),
             Self::Validation(_) => (StatusCode::BAD_REQUEST, "DELEGATION_VALIDATION_ERROR"),
-            Self::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "DELEGATION_DATABASE_ERROR"),
-            Self::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "DELEGATION_INTERNAL_ERROR"),
+            Self::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DELEGATION_DATABASE_ERROR",
+            ),
+            Self::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DELEGATION_INTERNAL_ERROR",
+            ),
         };
 
         let body = serde_json::json!({
@@ -109,10 +116,13 @@ impl axum::response::IntoResponse for DelegationError {
 /// let router = create_delegation_routes(service);
 /// ```
 pub fn create_delegation_routes(service: Arc<DelegationService>) -> Router {
-    BackboneCrudHandler::<DelegationService, Delegation, CreateDelegationDto, UpdateDelegationDto, DelegationResponseDto>::routes(
-        service,
-        "/delegations",
-    )
+    BackboneCrudHandler::<
+        DelegationService,
+        Delegation,
+        CreateDelegationDto,
+        UpdateDelegationDto,
+        DelegationResponseDto,
+    >::routes(service, "/delegations")
 }
 
 /// Create Axum router with only the read (GET) endpoints for Delegation.
@@ -121,21 +131,34 @@ pub fn create_delegation_routes(service: Arc<DelegationService>) -> Router {
 /// Mutations must be served separately via `create_delegation_write_routes`,
 /// typically wrapped in an auth middleware layer.
 pub fn create_delegation_read_routes(service: Arc<DelegationService>) -> Router {
-    BackboneCrudHandler::<DelegationService, Delegation, CreateDelegationDto, UpdateDelegationDto, DelegationResponseDto>::read_routes(
-        service,
-        "/delegations",
-    )
+    BackboneCrudHandler::<
+        DelegationService,
+        Delegation,
+        CreateDelegationDto,
+        UpdateDelegationDto,
+        DelegationResponseDto,
+    >::read_routes(service, "/delegations")
 }
 
 /// Create Axum router with only the write (mutation) endpoints for Delegation.
 ///
 /// These routes must NOT be publicly exposed. Wrap them with an auth
 /// middleware before nesting into the application router.
+///
+/// # This is unguarded generic CRUD, not a validated write path
+///
+/// These are plain create/update/patch/delete mutations over the entity row —
+/// they bypass all business invariants. If the module exposes a validated write
+/// service (e.g. a command router over its domain engine), serve THAT instead
+/// for any mutation that must respect domain rules.
 pub fn create_delegation_write_routes(service: Arc<DelegationService>) -> Router {
-    BackboneCrudHandler::<DelegationService, Delegation, CreateDelegationDto, UpdateDelegationDto, DelegationResponseDto>::write_routes(
-        service,
-        "/delegations",
-    )
+    BackboneCrudHandler::<
+        DelegationService,
+        Delegation,
+        CreateDelegationDto,
+        UpdateDelegationDto,
+        DelegationResponseDto,
+    >::write_routes(service, "/delegations")
 }
 
 /// Create authenticated routes with auth middleware.
@@ -152,31 +175,35 @@ pub fn create_protected_delegation_routes<A: AuthMiddleware + Send + Sync + 'sta
     use axum::response::IntoResponse;
 
     let auth_layer = auth.clone();
-    create_delegation_routes(service)
-        .layer(middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+    create_delegation_routes(service).layer(middleware::from_fn(
+        move |mut req: axum::extract::Request, next: axum::middleware::Next| {
             let auth = auth_layer.clone();
             async move {
-                let token = req.headers()
+                let token = req
+                    .headers()
                     .get(axum::http::header::AUTHORIZATION)
                     .and_then(|h| h.to_str().ok())
-                    .and_then(|raw| raw.strip_prefix("Bearer ").or_else(|| raw.strip_prefix("bearer ")))
+                    .and_then(|raw| {
+                        raw.strip_prefix("Bearer ")
+                            .or_else(|| raw.strip_prefix("bearer "))
+                    })
                     .unwrap_or("");
                 match auth.authenticate(token).await {
                     Ok(ctx) => {
                         req.extensions_mut().insert(ctx);
                         next.run(req).await
                     }
-                    Err(_) => {
-                        (axum::http::StatusCode::UNAUTHORIZED,
-                         axum::Json(serde_json::json!({
-                             "success": false,
-                             "error": "unauthorized",
-                             "message": "Authentication required"
-                         }))
-                        ).into_response()
-                    }
+                    Err(_) => (
+                        axum::http::StatusCode::UNAUTHORIZED,
+                        axum::Json(serde_json::json!({
+                            "success": false,
+                            "error": "unauthorized",
+                            "message": "Authentication required"
+                        })),
+                    )
+                        .into_response(),
                 }
             }
-        }))
+        },
+    ))
 }
-

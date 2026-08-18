@@ -12,9 +12,15 @@ use super::AuditMetadata;
 pub struct ApprovalPolicyId(pub Uuid);
 
 impl ApprovalPolicyId {
-    pub fn new(id: Uuid) -> Self { Self(id) }
-    pub fn generate() -> Self { Self(Uuid::new_v4()) }
-    pub fn into_inner(self) -> Uuid { self.0 }
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+    pub fn generate() -> Self {
+        Self(Uuid::new_v4())
+    }
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for ApprovalPolicyId {
@@ -31,20 +37,28 @@ impl std::str::FromStr for ApprovalPolicyId {
 }
 
 impl From<Uuid> for ApprovalPolicyId {
-    fn from(id: Uuid) -> Self { Self(id) }
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
 }
 
 impl From<ApprovalPolicyId> for Uuid {
-    fn from(id: ApprovalPolicyId) -> Self { id.0 }
+    fn from(id: ApprovalPolicyId) -> Self {
+        id.0
+    }
 }
 
 impl AsRef<Uuid> for ApprovalPolicyId {
-    fn as_ref(&self) -> &Uuid { &self.0 }
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
 }
 
 impl std::ops::Deref for ApprovalPolicyId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -63,11 +77,16 @@ pub struct ApprovalPolicy {
 impl ApprovalPolicy {
     /// Create a builder for ApprovalPolicy
     pub fn builder() -> ApprovalPolicyBuilder {
-        ApprovalPolicyBuilder::default()
+        <ApprovalPolicyBuilder as Default>::default()
     }
 
     /// Create a new ApprovalPolicy with required fields
-    pub fn new(company_id: Uuid, resource_type: ApprovalResourceType, name: String, is_active: bool) -> Self {
+    pub fn new(
+        company_id: Uuid,
+        resource_type: ApprovalResourceType,
+        name: String,
+        is_active: bool,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             company_id,
@@ -129,7 +148,6 @@ impl ApprovalPolicy {
         self.metadata.deleted_by.as_ref()
     }
 
-
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
@@ -149,19 +167,29 @@ impl ApprovalPolicy {
         for (key, value) in fields {
             match key.as_str() {
                 "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.company_id = v;
+                    }
                 }
                 "resource_type" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.resource_type = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.resource_type = v;
+                    }
                 }
                 "name" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.name = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.name = v;
+                    }
                 }
                 "is_active" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.is_active = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.is_active = v;
+                    }
                 }
                 "description" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.description = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.description = v;
+                    }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -218,7 +246,10 @@ impl backbone_orm::EntityRepoMeta for ApprovalPolicy {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
         m.insert("company_id".to_string(), "uuid".to_string());
-        m.insert("resource_type".to_string(), "approval_resource_type".to_string());
+        m.insert(
+            "resource_type".to_string(),
+            "approval_resource_type".to_string(),
+        );
         m
     }
     fn search_fields() -> &'static [&'static str] {
@@ -277,8 +308,12 @@ impl ApprovalPolicyBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<ApprovalPolicy, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
-        let resource_type = self.resource_type.ok_or_else(|| "resource_type is required".to_string())?;
+        let company_id = self
+            .company_id
+            .ok_or_else(|| "company_id is required".to_string())?;
+        let resource_type = self
+            .resource_type
+            .ok_or_else(|| "resource_type is required".to_string())?;
         let name = self.name.ok_or_else(|| "name is required".to_string())?;
 
         Ok(ApprovalPolicy {

@@ -79,4 +79,3 @@ async fn test_delegation_api() {
         panic!("{} tests failed", failed.len());
     }
 }
-

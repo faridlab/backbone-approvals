@@ -5,17 +5,18 @@
 //! Returns an `EntityValidator<ApprovalStep>` pre-loaded with schema-derived
 //! field rules. Extend in the `// <<< CUSTOM` zone.
 
-use backbone_core::{EntityValidator, ValidationErrors, ValidationError};
-use backbone_core::{OptionalNotBlank};
 use crate::domain::entity::ApprovalStep;
+use backbone_core::OptionalNotBlank;
+use backbone_core::{EntityValidator, ValidationError, ValidationErrors};
 
 /// Validator type alias for ApprovalStep entities.
 pub type ApprovalStepValidator = EntityValidator<ApprovalStep>;
 
 /// Build a validator for ApprovalStep with all schema-defined field rules.
 pub fn approval_step_validator() -> ApprovalStepValidator {
-    EntityValidator::new()
-        .rule(OptionalNotBlank::new("comment", |e: &ApprovalStep| e.comment.as_deref()))
+    EntityValidator::new().rule(OptionalNotBlank::new("comment", |e: &ApprovalStep| {
+        e.comment.as_deref()
+    }))
     // <<< CUSTOM RULES
     // END CUSTOM RULES
 }

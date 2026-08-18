@@ -58,7 +58,13 @@ impl TestDataGenerator for ApprovalStepTemplateTestData {
 
     async fn seed_dependencies(&self, api: &ApiTest) -> Vec<(String, String)> {
         let mut deps: Vec<(String, String)> = Vec::new();
-        if let Some(id) = super::crud_test_base::create_and_get_id(api, "/api/v1/approval_policies", &super::approval_policy_api_test::ApprovalPolicyTestData).await {
+        if let Some(id) = super::crud_test_base::create_and_get_id(
+            api,
+            "/api/v1/approval_policies",
+            &super::approval_policy_api_test::ApprovalPolicyTestData,
+        )
+        .await
+        {
             deps.push(("policy_id".to_string(), id));
         }
         deps
@@ -76,7 +82,8 @@ pub struct ApprovalStepTemplateApiTest {
 
 impl ApprovalStepTemplateApiTest {
     pub fn new() -> Self {
-        let mut config = CrudTestConfig::new("/api/v1/approval_step_templates", "ApprovalStepTemplate");
+        let mut config =
+            CrudTestConfig::new("/api/v1/approval_step_templates", "ApprovalStepTemplate");
         config.supports_soft_delete = true;
         Self {
             inner: GenericCrudTest::new(config, ApprovalStepTemplateTestData),

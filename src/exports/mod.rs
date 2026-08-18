@@ -8,17 +8,17 @@
 //! ## Usage from other modules
 //!
 //! ```text
-//! use approvals::exports::{ApprovalPolicyDto, ApprovalsQueryService};
+//! use approvals::exports::{ApprovalPolicyDto};
 //! ```
 
-mod types;
-mod services;
 mod events;
+mod services;
+mod types;
 
 // Re-export all public types
-pub use types::*;
-pub use services::*;
 pub use events::*;
+pub use services::*;
+pub use types::*;
 
 // ============================================================================
 // EXPORT SUMMARY
@@ -42,9 +42,6 @@ pub use events::*;
 /// - `DelegationDto` - Data transfer object for Delegation
 /// - `DelegationSummary` - Summary view of Delegation
 /// - `DelegationId` - Type-safe ID wrapper
-///
-/// ## Public Services
-/// - `ApprovalsQueryService` - Read-only queries
 ///
 /// ## Public Events
 /// - `ApprovalPolicyCreatedEvent` - Published when ApprovalPolicy is created

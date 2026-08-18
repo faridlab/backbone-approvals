@@ -5,10 +5,10 @@
 //! These DTOs are the ONLY types other modules should use.
 //! They are decoupled from internal domain entities.
 
+use crate::domain::entity::*;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc, NaiveDate};
-use crate::domain::entity::*;
 
 // ============================================================================
 // APPROVALPOLICY TYPES
@@ -177,6 +177,7 @@ pub struct ApprovalStepDto {
     pub request_id: Uuid,
     pub step_no: i32,
     pub approver_kind: ApproverKind,
+    pub approver_ref: Option<Uuid>,
     pub assigned_to: Uuid,
     pub delegated_from: Option<Uuid>,
     pub status: ApprovalStepStatus,

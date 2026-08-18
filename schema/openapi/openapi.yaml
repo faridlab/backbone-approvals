@@ -2225,6 +2225,10 @@ components:
           format: int32
         approver_kind:
           type: string
+        approver_ref:
+          nullable: true
+          type: string
+          format: uuid
         assigned_to:
           type: string
           format: uuid
@@ -2283,6 +2287,10 @@ components:
           format: int32
         approver_kind:
           type: string
+        approver_ref:
+          nullable: true
+          type: string
+          format: uuid
         assigned_to:
           type: string
           format: uuid
@@ -2328,6 +2336,10 @@ components:
           format: int32
         approver_kind:
           type: string
+        approver_ref:
+          nullable: true
+          type: string
+          format: uuid
         assigned_to:
           type: string
           format: uuid
@@ -2365,6 +2377,10 @@ components:
           format: int32
         approver_kind:
           type: string
+        approver_ref:
+          nullable: true
+          type: string
+          format: uuid
         assigned_to:
           type: string
           format: uuid

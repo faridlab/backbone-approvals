@@ -12,9 +12,15 @@ use super::AuditMetadata;
 pub struct ApprovalStepTemplateId(pub Uuid);
 
 impl ApprovalStepTemplateId {
-    pub fn new(id: Uuid) -> Self { Self(id) }
-    pub fn generate() -> Self { Self(Uuid::new_v4()) }
-    pub fn into_inner(self) -> Uuid { self.0 }
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+    pub fn generate() -> Self {
+        Self(Uuid::new_v4())
+    }
+    pub fn into_inner(self) -> Uuid {
+        self.0
+    }
 }
 
 impl std::fmt::Display for ApprovalStepTemplateId {
@@ -31,20 +37,28 @@ impl std::str::FromStr for ApprovalStepTemplateId {
 }
 
 impl From<Uuid> for ApprovalStepTemplateId {
-    fn from(id: Uuid) -> Self { Self(id) }
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
 }
 
 impl From<ApprovalStepTemplateId> for Uuid {
-    fn from(id: ApprovalStepTemplateId) -> Self { id.0 }
+    fn from(id: ApprovalStepTemplateId) -> Self {
+        id.0
+    }
 }
 
 impl AsRef<Uuid> for ApprovalStepTemplateId {
-    fn as_ref(&self) -> &Uuid { &self.0 }
+    fn as_ref(&self) -> &Uuid {
+        &self.0
+    }
 }
 
 impl std::ops::Deref for ApprovalStepTemplateId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target { &self.0 }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -65,11 +79,16 @@ pub struct ApprovalStepTemplate {
 impl ApprovalStepTemplate {
     /// Create a builder for ApprovalStepTemplate
     pub fn builder() -> ApprovalStepTemplateBuilder {
-        ApprovalStepTemplateBuilder::default()
+        <ApprovalStepTemplateBuilder as Default>::default()
     }
 
     /// Create a new ApprovalStepTemplate with required fields
-    pub fn new(company_id: Uuid, policy_id: Uuid, step_no: i32, approver_kind: ApproverKind) -> Self {
+    pub fn new(
+        company_id: Uuid,
+        policy_id: Uuid,
+        step_no: i32,
+        approver_kind: ApproverKind,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             company_id,
@@ -133,7 +152,6 @@ impl ApprovalStepTemplate {
         self.metadata.deleted_by.as_ref()
     }
 
-
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
@@ -165,25 +183,39 @@ impl ApprovalStepTemplate {
         for (key, value) in fields {
             match key.as_str() {
                 "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.company_id = v;
+                    }
                 }
                 "policy_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.policy_id = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.policy_id = v;
+                    }
                 }
                 "step_no" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.step_no = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.step_no = v;
+                    }
                 }
                 "approver_kind" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.approver_kind = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.approver_kind = v;
+                    }
                 }
                 "approver_ref" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.approver_ref = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.approver_ref = v;
+                    }
                 }
                 "sla_hours" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.sla_hours = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.sla_hours = v;
+                    }
                 }
                 "all_of" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.all_of = v; }
+                    if let Ok(v) = serde_json::from_value(value) {
+                        self.all_of = v;
+                    }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -314,10 +346,18 @@ impl ApprovalStepTemplateBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<ApprovalStepTemplate, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
-        let policy_id = self.policy_id.ok_or_else(|| "policy_id is required".to_string())?;
-        let step_no = self.step_no.ok_or_else(|| "step_no is required".to_string())?;
-        let approver_kind = self.approver_kind.ok_or_else(|| "approver_kind is required".to_string())?;
+        let company_id = self
+            .company_id
+            .ok_or_else(|| "company_id is required".to_string())?;
+        let policy_id = self
+            .policy_id
+            .ok_or_else(|| "policy_id is required".to_string())?;
+        let step_no = self
+            .step_no
+            .ok_or_else(|| "step_no is required".to_string())?;
+        let approver_kind = self
+            .approver_kind
+            .ok_or_else(|| "approver_kind is required".to_string())?;
 
         Ok(ApprovalStepTemplate {
             id: Uuid::new_v4(),

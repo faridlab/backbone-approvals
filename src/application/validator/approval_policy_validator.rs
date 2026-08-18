@@ -5,9 +5,9 @@
 //! Returns an `EntityValidator<ApprovalPolicy>` pre-loaded with schema-derived
 //! field rules. Extend in the `// <<< CUSTOM` zone.
 
-use backbone_core::{EntityValidator, ValidationErrors, ValidationError};
-use backbone_core::{OptionalNotBlank, RequiredString};
 use crate::domain::entity::ApprovalPolicy;
+use backbone_core::{EntityValidator, ValidationError, ValidationErrors};
+use backbone_core::{OptionalNotBlank, RequiredString};
 
 /// Validator type alias for ApprovalPolicy entities.
 pub type ApprovalPolicyValidator = EntityValidator<ApprovalPolicy>;
@@ -16,7 +16,10 @@ pub type ApprovalPolicyValidator = EntityValidator<ApprovalPolicy>;
 pub fn approval_policy_validator() -> ApprovalPolicyValidator {
     EntityValidator::new()
         .rule(RequiredString::new("name", |e: &ApprovalPolicy| &e.name))
-        .rule(OptionalNotBlank::new("description", |e: &ApprovalPolicy| e.description.as_deref()))
+        .rule(OptionalNotBlank::new(
+            "description",
+            |e: &ApprovalPolicy| e.description.as_deref(),
+        ))
     // <<< CUSTOM RULES
     // END CUSTOM RULES
 }
