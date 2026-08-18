@@ -135,6 +135,8 @@ pub enum ApprovalsError {
     StepResolutionFailed(String),
     #[error("the template's all_of quorum must be an array of employee ids")]
     InvalidQuorum,
+    #[error("the policy's approval chain is invalid: {0}")]
+    InvalidChain(String),
     #[error("the template names a specific approver without a reference")]
     MissingApproverRef,
     #[error("filing lost the concurrent-filing race too many times — retry")]
@@ -154,6 +156,7 @@ impl ApprovalsError {
             Self::NotRequester => "not_requester",
             Self::StepResolutionFailed(_) => "step_resolution_failed",
             Self::InvalidQuorum => "invalid_quorum",
+            Self::InvalidChain(_) => "invalid_approval_chain",
             Self::MissingApproverRef => "missing_approver_ref",
             Self::FilingRaceExhausted => "filing_race_exhausted",
             Self::Db(_) => "database_error",
@@ -165,7 +168,10 @@ impl ApprovalsError {
             Self::NotFound | Self::NoSuchStep => 404,
             Self::NotStepApprover | Self::NotRequester => 403,
             Self::NotPending | Self::OutOfTurn => 409,
-            Self::StepResolutionFailed(_) | Self::InvalidQuorum | Self::MissingApproverRef => 422,
+            Self::StepResolutionFailed(_)
+            | Self::InvalidQuorum
+            | Self::MissingApproverRef
+            | Self::InvalidChain(_) => 422,
             Self::FilingRaceExhausted => 503,
             Self::Db(_) => 500,
         }
@@ -277,13 +283,20 @@ impl ApprovalsWriteService {
 
             if let Some(policy) = policy {
                 let templates = self.repo.templates_for_policy(&mut tx, policy.id).await?;
-                for template in templates {
-                    let members = self.resolve_members(&template, filing.requested_by).await?;
+                // Resolve the whole chain first, then validate it as a whole, then insert.
+                // The engine walks step numbers one at a time from 1, so a chain that is
+                // empty, starts above 1, skips a number, or resolves two members of one
+                // step onto the same approver would park the request on a step nobody can
+                // decide — every decision a 404 and withdraw the only exit. Rejecting at
+                // file time keeps the misconfiguration recoverable by editing the policy.
+                let mut rows: Vec<ApprovalStep> = Vec::new();
+                for template in &templates {
+                    let members = self.resolve_members(template, filing.requested_by).await?;
                     for member in members {
                         let (assigned_to, delegated_from) = self
                             .apply_delegation(&mut tx, filing.company_id, member.assigned_to)
                             .await?;
-                        let step = ApprovalStep {
+                        rows.push(ApprovalStep {
                             id: Uuid::new_v4(),
                             company_id: filing.company_id,
                             request_id: request.id,
@@ -299,8 +312,23 @@ impl ApprovalsWriteService {
                                 .sla_hours
                                 .map(|h| now + chrono::Duration::hours(h as i64)),
                             metadata: Default::default(),
-                        };
-                        self.repo.insert_step(&mut tx, &step).await?;
+                        });
+                    }
+                }
+                Self::validate_chain(&templates, &rows)?;
+                for step in rows {
+                    match self.repo.insert_step(&mut tx, &step).await {
+                        Ok(()) => {}
+                        // Distinctness was just validated; this is reachable only when a
+                        // delegation edit races the filing onto the same approver — a
+                        // chain fault, not a raw 500.
+                        Err(e) if is_unique_violation(&e) => {
+                            return Err(ApprovalsError::InvalidChain(
+                                "two members of one step resolve to the same approver"
+                                    .to_string(),
+                            ))
+                        }
+                        Err(e) => return Err(e.into()),
                     }
                 }
             }
@@ -400,6 +428,58 @@ impl ApprovalsWriteService {
                 Ok(one(ApproverKind::Position, Some(position), holder))
             }
         }
+    }
+
+    /// A chain is walkable only when its distinct step numbers are exactly 1..=max, every
+    /// step holds at least one materialized member, and no approver appears twice within
+    /// one step once delegations are applied. Everything else parks the request on a step
+    /// no live row covers. Several templates MAY share a step number (an and-composition
+    /// at that step); the walk only cares about the distinct numbers.
+    fn validate_chain(
+        templates: &[crate::domain::entity::ApprovalStepTemplate],
+        rows: &[ApprovalStep],
+    ) -> Result<(), ApprovalsError> {
+        if templates.is_empty() {
+            return Err(ApprovalsError::InvalidChain(
+                "the active policy has no step templates".to_string(),
+            ));
+        }
+        let mut steps: Vec<i32> = templates.iter().map(|t| t.step_no).collect();
+        steps.sort_unstable();
+        steps.dedup();
+        if steps[0] != 1 {
+            return Err(ApprovalsError::InvalidChain(format!(
+                "step numbers must start at 1 (found {} first)",
+                steps[0]
+            )));
+        }
+        for (i, s) in steps.iter().enumerate() {
+            if *s != i as i32 + 1 {
+                return Err(ApprovalsError::InvalidChain(format!(
+                    "step numbers must be contiguous (missing step {})",
+                    i + 1
+                )));
+            }
+        }
+        for &s in &steps {
+            let mut seen = std::collections::HashSet::new();
+            let mut members_at_step = 0usize;
+            for m in rows.iter().filter(|r| r.step_no == s) {
+                members_at_step += 1;
+                if !seen.insert(m.assigned_to) {
+                    return Err(ApprovalsError::InvalidChain(format!(
+                        "step {s} resolves two members onto the same approver \
+                         (a duplicated member or a shared delegate)"
+                    )));
+                }
+            }
+            if members_at_step == 0 {
+                return Err(ApprovalsError::InvalidChain(format!(
+                    "step {s} resolves to no approver"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Pre-apply a live delegation window: the delegate decides, the row records whose

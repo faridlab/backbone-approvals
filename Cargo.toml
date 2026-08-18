@@ -1,6 +1,6 @@
 [package]
 name = "backbone-approvals"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "the approval spine — requests, multi-step chains, delegation, SLA"
 

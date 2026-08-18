@@ -27,7 +27,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::middleware::from_fn_with_state;
-use sqlx::{Acquire, PgPool};
+use sqlx::{Acquire, Executor, PgPool};
 use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -1044,4 +1044,181 @@ async fn guarded_routes_decide_with_engine_side_authorization() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ─── 15: chain validity is enforced at file time ─────────────────────────────
+//
+// The engine walks step numbers from 1 one at a time. A chain that is empty, starts
+// above 1, skips a number, or resolves two members of one step onto the same approver
+// would park the request on a step nobody can decide — every decision a 404, withdraw
+// the only exit. All of those are configuration faults; filing must reject them typed
+// (422) and leave no request row behind.
+
+#[tokio::test]
+async fn policy_without_templates_fails_at_file() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    let _ = policy;
+
+    let svc = ApprovalsWriteService::new(pool.clone());
+    let err = svc
+        .file(filing(company, Uuid::new_v4(), Uuid::new_v4()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::InvalidChain(_)), "{err}");
+    assert_eq!(err.http_status(), 422);
+    assert_eq!(err.code(), "invalid_approval_chain");
+
+    let n: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM approvals.approval_requests WHERE company_id = $1"#,
+    )
+    .bind(company)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 0);
+}
+
+#[tokio::test]
+async fn chain_with_a_step_gap_fails_at_file() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 1, "specific_employee", Some(Uuid::new_v4()), None).await;
+    seed_template(&pool, company, policy, 3, "specific_employee", Some(Uuid::new_v4()), None).await;
+
+    let svc = ApprovalsWriteService::new(pool.clone());
+    let err = svc
+        .file(filing(company, Uuid::new_v4(), Uuid::new_v4()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::InvalidChain(_)), "{err}");
+    assert_eq!(err.http_status(), 422);
+}
+
+#[tokio::test]
+async fn chain_not_starting_at_one_fails_at_file() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 2, "specific_employee", Some(Uuid::new_v4()), None).await;
+
+    let svc = ApprovalsWriteService::new(pool.clone());
+    let err = svc
+        .file(filing(company, Uuid::new_v4(), Uuid::new_v4()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::InvalidChain(_)), "{err}");
+    assert_eq!(err.http_status(), 422);
+}
+
+#[tokio::test]
+async fn quorum_naming_a_member_twice_fails_at_file() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let duplicated = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        1,
+        "specific_employee",
+        None,
+        Some(serde_json::json!([duplicated, duplicated])),
+    )
+    .await;
+
+    let svc = ApprovalsWriteService::new(pool.clone());
+    let err = svc
+        .file(filing(company, Uuid::new_v4(), Uuid::new_v4()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::InvalidChain(_)), "{err}");
+    assert_eq!(err.http_status(), 422);
+}
+
+#[tokio::test]
+async fn quorum_sharing_one_delegate_fails_at_file() {
+    // Two distinct members whose live delegation windows both point at the same person:
+    // the step would carry two rows with one decider — reject it as a chain fault.
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let member_a = Uuid::new_v4();
+    let member_b = Uuid::new_v4();
+    let shared_delegate = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        1,
+        "specific_employee",
+        None,
+        Some(serde_json::json!([member_a, member_b])),
+    )
+    .await;
+    let window = (chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(), chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap());
+    seed_delegation(&pool, company, member_a, shared_delegate, window.0, window.1).await;
+    seed_delegation(&pool, company, member_b, shared_delegate, window.0, window.1).await;
+
+    let svc = ApprovalsWriteService::new(pool.clone());
+    let err = svc
+        .file(filing(company, Uuid::new_v4(), Uuid::new_v4()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::InvalidChain(_)), "{err}");
+    assert_eq!(err.http_status(), 422);
+
+    let n: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM approvals.approval_requests WHERE company_id = $1"#,
+    )
+    .bind(company)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 0);
+}
+
+// ─── 16: one active policy per resource ──────────────────────────────────────
+//
+// The partial unique index approval_policies_single_active refuses a second active
+// policy for the same (company, resource_type) — a replacement policy must deactivate
+// the old one first, or it silently never routes anything.
+
+#[tokio::test]
+async fn second_active_policy_for_a_resource_is_refused() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+
+    let insert = |name: &str, active: bool| {
+        sqlx::query(
+            r#"INSERT INTO approvals.approval_policies
+                   (id, company_id, resource_type, name, is_active, description, metadata)
+               VALUES ($1, $2, 'leave', $3, $4, NULL, '{}'::jsonb)"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(company)
+        .bind(name.to_string())
+        .bind(active)
+    };
+    pool.execute(insert("first policy", true)).await.unwrap();
+    // Same name family, distinct names — the (company, resource_type, name) unique is not
+    // the constraint under test; the partial unique on ACTIVE rows is.
+    let err = pool.execute(insert("replacement", true)).await.unwrap_err();
+    let code = err
+        .as_database_error()
+        .and_then(|d| d.code())
+        .map(|c| c.to_string())
+        .unwrap_or_default();
+    assert_eq!(code, "23505", "second active policy must trip the partial unique");
+
+    // Deactivating the first frees the slot — the replacement activates cleanly.
+    sqlx::query("UPDATE approvals.approval_policies SET is_active = false WHERE company_id = $1")
+        .bind(company)
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool.execute(insert("replacement", true)).await.unwrap();
 }

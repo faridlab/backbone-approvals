@@ -63,8 +63,10 @@ impl ApprovalsWriteRepository {
 
     // ── policy / templates ──────────────────────────────────────────────────
 
-    /// The active policy for a resource, deterministically picked when a tenant (against
-    /// guidance) keeps several active: earliest created, then lowest id.
+    /// The active policy for a resource. The partial unique index
+    /// `approval_policies_single_active` keeps exactly one active policy per company and
+    /// resource type; the deterministic ordering below is a defense for rows that predate
+    /// the index, not a picker between legitimate alternatives.
     pub async fn find_active_policy(
         &self,
         conn: &mut sqlx::PgConnection,

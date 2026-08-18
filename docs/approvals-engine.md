@@ -37,6 +37,23 @@ engine owns every state change after that.
   template returns `422 step_resolution_failed`. Hosts that want dynamic
   resolution supply a resolver via `with_resolver` and own its semantics.
   `specific_employee` and `all_of` (of employees) resolve without a resolver.
+- **Chains are validated at file time.** The engine walks step numbers from 1
+  one at a time, so a chain whose distinct step numbers are not exactly
+  `1..=max`, whose step holds no materialized member, or in which two members
+  of one step resolve (after delegation) onto the same person would park the
+  request on a step nobody can decide — every `decide` a 404 with withdraw the
+  only exit. Filing rejects such chains with `422 invalid_approval_chain` and
+  leaves no request row: an empty template set, a first step other than 1, a
+  numbering gap, a duplicated quorum member, or two members sharing one
+  delegate are all configuration faults the policy author fixes, not states
+  the requester inherits. A step-insert unique violation that survives
+  validation (a delegation edit racing the filing) surfaces as the same typed
+  error, never a raw 500.
+- **One active policy per resource.** The partial unique index
+  `approval_policies_single_active` refuses a second active policy for a
+  `(company, resource_type)` — a replacement policy must deactivate the old
+  one first. Before the index, the engine's deterministic earliest-created
+  pick made a replacement a silent no-op.
 
 ## Deciding
 
@@ -81,16 +98,18 @@ the consumer's re-submit files a fresh chain.
 
 - **Policy-admin RBAC.** The guarded surface exposes policy / step-template /
   delegation CRUD authenticated only by tenant. WHO may define chains is the
-  composing app's decision (typically an operator role).
-- **One active policy per resource type** is the intended shape; if several
-  are active the engine deterministically picks the earliest-created (then
-  lowest id) rather than failing.
+  composing app's decision (typically an operator role). Until the host has a
+  role-checking middleware, mount the CRUD routers NOT AT ALL (seed operator
+  master data in the database) — the rows are the authorization data the engine
+  trusts at decide time, and any employee able to write them can name themselves
+  approver or delegate themselves an approver's authority.
 - **`role_refs` trust boundary.** Decide-time role authorization trusts the
   role ids the host's token vouches for. The host must derive them from its own
   role assignments — a client-supplied `roleRefs` is only as trustworthy as the
   HTTP layer that accepted it. The guarded routes document this but cannot
   enforce it; hosts behind stricter middleware can ignore the body field and
-  inject verified refs.
+  inject verified refs. If the host wires no role-resolver, role templates fail
+  closed at file time and the body field is inert.
 - **Tenant binding.** Mount the guarded surface behind `company_auth` with the
   request-scoped DB binding (strict-RLS posture). Every engine statement rides
   a `bind_company_on` transaction with explicit `company_id` predicates; a
