@@ -1097,6 +1097,76 @@ async fn holders_sharing_one_delegate_fail_at_file() {
     assert_eq!(n, 0, "a colliding delegation set leaves no request behind");
 }
 
+/// Row-truth contract of the decide write: `mark_step_decided` reports whether THIS
+/// transaction decided the row. The any-holder sibling skip (or a reject's fail-fast
+/// skip) flips rows a racing decider still believes pending — the loser must see
+/// `false` and write no verdict on top. The full interleaving needs two live
+/// transactions; this pins the observable the service's convergence branch trusts.
+#[tokio::test]
+async fn mark_decide_row_truth_reports_a_lost_race() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let role = Uuid::new_v4();
+    let h1 = Uuid::new_v4();
+    let h2 = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 1, "role", Some(role), None).await;
+
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(Uuid::new_v4(), Uuid::new_v4()).with_role(role, vec![h1, h2]),
+    ));
+    let outcome = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+
+    let h2_step: Uuid = sqlx::query_scalar(
+        r#"SELECT id FROM approvals.approval_steps
+            WHERE company_id = $1 AND request_id = $2 AND assigned_to = $3"#,
+    )
+    .bind(company)
+    .bind(outcome.request_id)
+    .bind(h2)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // h1's approval completes the group — h2's row is skipped, not pending.
+    svc.decide(decide_as(company, outcome.request_id, 1, h1, true))
+        .await
+        .unwrap();
+
+    // A racing decider that authorized against a pre-commit snapshot lands here:
+    // the UPDATE matches nothing. The `false` return is what lets the service
+    // refuse to write a verdict on evidence the transaction does not own.
+    let repo = backbone_approvals::infrastructure::persistence::ApprovalsWriteRepository;
+    let mut tx = pool.begin().await.unwrap();
+    let decided = repo
+        .mark_step_decided(
+            &mut tx,
+            company,
+            h2_step,
+            backbone_approvals::domain::entity::ApprovalStepStatus::Rejected,
+            None,
+            None,
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    assert!(
+        !decided,
+        "a row the sibling skip already moved is not decidable"
+    );
+
+    // The request keeps exactly the verdict the winner wrote.
+    assert_eq!(
+        svc.status(company, outcome.request_id).await.unwrap(),
+        ApprovalStatus::Approved
+    );
+}
+
 // ─── 9: cross-tenant is 404, both directions ─────────────────────────────────
 
 #[tokio::test]

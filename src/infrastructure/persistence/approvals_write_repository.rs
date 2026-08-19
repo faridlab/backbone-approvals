@@ -360,10 +360,12 @@ impl ApprovalsWriteRepository {
         Ok(())
     }
 
-    /// Decide one member row. Row-truth: only a still-pending row matches; the service
-    /// treats 0 rows as an already-decided idempotent no-op (it pre-filtered authorization).
-    /// `delegated_from` records inherited authority when the decider acted via a live
-    /// delegation window (COALESCE keeps any pre-resolved stamp).
+    /// Decide one member row. Row-truth: only a still-pending row matches — `false`
+    /// means a concurrent decision moved it first (an approve's sibling skip, or a
+    /// reject's fail-fast skip), and the caller MUST write no verdict on top; it
+    /// re-reads the request instead. `delegated_from` records inherited authority when
+    /// the decider acted via a live delegation window (COALESCE keeps any pre-resolved
+    /// stamp).
     #[allow(clippy::too_many_arguments)]
     pub async fn mark_step_decided(
         &self,
@@ -374,8 +376,8 @@ impl ApprovalsWriteRepository {
         comment: Option<&str>,
         delegated_from: Option<Uuid>,
         now: DateTime<Utc>,
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query(
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
             r#"UPDATE approvals.approval_steps SET
                    status = $3,
                    acted_at = $6,
@@ -394,7 +396,7 @@ impl ApprovalsWriteRepository {
         .bind(now)
         .execute(&mut *conn)
         .await?;
-        Ok(())
+        Ok(result.rows_affected() > 0)
     }
 
     /// Skip every other live pending step (`except`: the row that just decided, if any).

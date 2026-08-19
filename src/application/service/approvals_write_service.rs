@@ -614,7 +614,8 @@ impl ApprovalsWriteService {
         if !decision.approve {
             // Fail fast: this member row rejects, the request rejects, every other live
             // pending step is skipped.
-            self.repo
+            let decided = self
+                .repo
                 .mark_step_decided(
                     &mut tx,
                     decision.company_id,
@@ -625,6 +626,20 @@ impl ApprovalsWriteService {
                     now,
                 )
                 .await?;
+            if !decided {
+                // Row-truth loss: a concurrent decision moved this row first (an
+                // approve's any-holder sibling skip, or another reject's fail-fast
+                // skip). This decision owns nothing now — write no verdict on top;
+                // report how the request converged.
+                let status = self
+                    .repo
+                    .get_request(&mut tx, decision.company_id, decision.request_id)
+                    .await?
+                    .map(|r| r.status)
+                    .unwrap_or(request.status);
+                tx.commit().await?;
+                return Ok(status);
+            }
             self.repo
                 .skip_other_pending_steps(
                     &mut tx,
@@ -659,7 +674,8 @@ impl ApprovalsWriteService {
             return Ok(final_status);
         }
 
-        self.repo
+        let decided = self
+            .repo
             .mark_step_decided(
                 &mut tx,
                 decision.company_id,
@@ -670,6 +686,19 @@ impl ApprovalsWriteService {
                 now,
             )
             .await?;
+        if !decided {
+            // Same row-truth loss as the reject branch: the group completed under this
+            // decision (any-holder sibling skip) or a reject skipped the row. The row
+            // records what happened; this decision writes nothing on top.
+            let status = self
+                .repo
+                .get_request(&mut tx, decision.company_id, decision.request_id)
+                .await?
+                .map(|r| r.status)
+                .unwrap_or(request.status);
+            tx.commit().await?;
+            return Ok(status);
+        }
 
         // Role/position steps are ANY-HOLDER: every sibling row of the same template
         // (same step_no, kind, and approver_ref) is decided by this one approval —
