@@ -31,12 +31,18 @@ engine owns every state change after that.
   stamps `delegated_from`); windows opened later do not re-resolve existing
   steps. An `all_of` template materializes one row per member at the same
   `step_no` — the step completes only when every live member approves.
-- **Dynamic approvers fail closed.** `manager_of` / `department_head_of` /
-  `role_holder` / `position_holder` templates need an `ApproverResolver`; the
+- **Dynamic approvers fail closed.** `manager_of_requester` / `department_head` /
+  `role` / `position` templates need an `ApproverResolver`; the
   shipped `FailClosedResolver` resolves none of them, so filing against such a
   template returns `422 step_resolution_failed`. Hosts that want dynamic
   resolution supply a resolver via `with_resolver` and own its semantics.
   `specific_employee` and `all_of` (of employees) resolve without a resolver.
+  The single-approver kinds (`manager`, `department_head`) resolve to one
+  employee; the multi-holder kinds (`role`, `position`) resolve to EVERY current
+  holder and materialize one member row per holder, each stamped with the
+  template's `approver_ref`. A dynamic kind that resolves to nobody leaves the
+  step without a member and the whole filing refuses (`422
+  invalid_approval_chain`).
 - **Chains are validated at file time.** The engine walks step numbers from 1
   one at a time, so a chain whose distinct step numbers are not exactly
   `1..=max`, whose step holds no materialized member, or in which two members
@@ -58,12 +64,11 @@ engine owns every state change after that.
 ## Deciding
 
 - **Authorization is engine-side**, checked against the live rows at decide
-  time — the HTTP layer vouches only for the tenant:
+  time — the HTTP layer vouches only for the tenant, and nothing the client
+  presented influences the outcome:
   1. `assigned_to == actor.employee_id`, or
   2. the actor holds a live delegation from that assignee (stamps
-     `delegated_from` on the decided row), or
-  3. the step's `approver_kind` is `role` and the actor's presented
-     `role_refs` contain the step's `approver_ref`.
+     `delegated_from` on the decided row).
 - **Reject fails fast.** One rejection decides the request `rejected` and
   skips every other pending step row — siblings never linger.
 - **Approve counts down a quorum.** Each member row approves individually; the
@@ -103,13 +108,12 @@ the consumer's re-submit files a fresh chain.
   master data in the database) — the rows are the authorization data the engine
   trusts at decide time, and any employee able to write them can name themselves
   approver or delegate themselves an approver's authority.
-- **`role_refs` trust boundary.** Decide-time role authorization trusts the
-  role ids the host's token vouches for. The host must derive them from its own
-  role assignments — a client-supplied `roleRefs` is only as trustworthy as the
-  HTTP layer that accepted it. The guarded routes document this but cannot
-  enforce it; hosts behind stricter middleware can ignore the body field and
-  inject verified refs. If the host wires no role-resolver, role templates fail
-  closed at file time and the body field is inert.
+- **Approver resolution is host-owned.** The engine resolves `manager`,
+  `department_head`, `role`, and `position` templates through the
+  `ApproverResolver` the host wires via `with_resolver`; without one those
+  kinds fail closed at file time. What "the manager" or "a role's holders"
+  means is org data the host owns — the engine only trusts what the resolver
+  returns, materialized once per filing.
 - **Tenant binding.** Mount the guarded surface behind `company_auth` with the
   request-scoped DB binding (strict-RLS posture). Every engine statement rides
   a `bind_company_on` transaction with explicit `company_id` predicates; a

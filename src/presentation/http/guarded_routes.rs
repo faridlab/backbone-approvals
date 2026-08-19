@@ -10,8 +10,8 @@
 //!   the engine verbs own every state change.
 //! - **Engine verbs**: `POST /approvals/requests/:id/decide` and
 //!   `POST /approvals/requests/:id/withdraw` over [`ApprovalsWriteService`], whose
-//!   decide-time authorization is ENGINE-side (assigned approver / live delegation / role
-//!   ref). `roleRefs` on the decide body are the role ids the HOST's token vouches for.
+//!   decide-time authorization is ENGINE-side (assigned approver / live delegation
+//!   window) — no client-supplied claim influences it.
 //!
 //! The tenant comes from the [`CompanyContext`] the `company_auth` middleware inserts —
 //! never from the body. Composers MUST mount this behind `company_auth` with the
@@ -116,8 +116,6 @@ struct DecideBody {
     /// `approve` or `reject`.
     decision: String,
     comment: Option<String>,
-    /// Role ids the host's token vouches the actor holds (role-step authorization).
-    role_refs: Option<Vec<Uuid>>,
 }
 
 async fn decide(
@@ -143,10 +141,7 @@ async fn decide(
         company_id: tenant.company_id,
         request_id,
         step_no: body.step_no,
-        actor: ApproverActor {
-            employee_id,
-            role_refs: body.role_refs.unwrap_or_default(),
-        },
+        actor: ApproverActor { employee_id },
         approve: body.decision == "approve",
         comment: body.comment,
     };

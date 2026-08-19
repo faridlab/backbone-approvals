@@ -8,9 +8,9 @@
 //! - policy filing materializes every step once, delegation pre-resolved;
 //! - all_of quorum (one row per member, every row must approve), reject fails fast and
 //!   skips siblings, sequential steps gate each other;
-//! - decide-time authorization is engine-side (assigned / live delegation window /
-//!   presented role refs), with delegation stamping `delegated_from` (the authority
-//!   source, never the decider);
+//! - decide-time authorization is engine-side (assigned / live delegation window),
+//!   with delegation stamping `delegated_from` (the authority source, never the
+//!   decider);
 //! - idempotent filing including the concurrent loser (23505 → same live request);
 //! - withdraw frees the per-resource unique for a fresh chain;
 //! - dynamic approver kinds fail closed without a resolver (422);
@@ -191,10 +191,7 @@ fn decide_as(company: Uuid, request: Uuid, step_no: i32, actor: Uuid, approve: b
         company_id: company,
         request_id: request,
         step_no,
-        actor: ApproverActor {
-            employee_id: actor,
-            role_refs: vec![],
-        },
+        actor: ApproverActor { employee_id: actor },
         approve,
         comment: None,
     }
@@ -646,61 +643,11 @@ async fn decide_time_delegation_stamps_the_authority_source() {
     assert_eq!(delegated_from, Some(approver));
 }
 
-// ─── 8: role steps authorize on presented role refs ──────────────────────────
-
-/// Resolves every dynamic kind to one fixed employee — the semantics a real host
-/// resolver would derive from org structure.
-struct FixedResolver(Uuid);
-#[async_trait::async_trait]
-impl ApproverResolver for FixedResolver {
-    async fn manager_of(&self, _c: Uuid, _r: Uuid) -> Result<Uuid, String> {
-        Ok(self.0)
-    }
-    async fn department_head_of(&self, _c: Uuid, _r: Uuid) -> Result<Uuid, String> {
-        Ok(self.0)
-    }
-    async fn role_holder(&self, _c: Uuid, _role: Uuid) -> Result<Uuid, String> {
-        Ok(self.0)
-    }
-    async fn position_holder(&self, _c: Uuid, _p: Uuid) -> Result<Uuid, String> {
-        Ok(self.0)
-    }
-}
-
-#[tokio::test]
-async fn role_steps_authorize_on_presented_role_refs() {
-    let pool = pool().await;
-    let company = Uuid::new_v4();
-    let employee = Uuid::new_v4();
-    let holder = Uuid::new_v4();
-    let role = Uuid::new_v4();
-    let policy = seed_policy(&pool, company, "leave").await;
-    seed_template(&pool, company, policy, 1, "role", Some(role), None).await;
-
-    let svc =
-        ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(FixedResolver(holder)));
-    let outcome = svc
-        .file(filing(company, Uuid::new_v4(), employee))
-        .await
-        .unwrap();
-    // Resolved to the holder, but the role ref is kept for decide-time re-check.
-    let (status, _) = step_row(&pool, company, outcome.request_id, holder).await;
-    assert_eq!(status, "pending");
-
-    // A random actor without the role: refused.
-    let mut d = decide_as(company, outcome.request_id, 1, Uuid::new_v4(), true);
-    d.actor.role_refs = vec![Uuid::new_v4()];
-    assert!(matches!(
-        svc.decide(d).await.unwrap_err(),
-        ApprovalsError::NotStepApprover
-    ));
-
-    // An actor presenting the very role id the row was resolved from: authorized.
-    let mut d = decide_as(company, outcome.request_id, 1, Uuid::new_v4(), true);
-    d.actor.role_refs = vec![role];
-    let verdict = svc.decide(d).await.unwrap();
-    assert_eq!(verdict, ApprovalStatus::Approved);
-}
+// ─── 8: dynamic kinds resolve through the host resolver ──────────────────────
+//
+// The multi-holder probes (role/position materialization + any-holder
+// completion) live below with their MapResolver fixture; the fail-closed
+// default is pinned by probe 12.
 
 // ─── 9: cross-tenant is 404, both directions ─────────────────────────────────
 

@@ -11,11 +11,11 @@
 //!   per member at the SAME step_no — the quorum unique index), approvers resolved at file
 //!   time, any live delegation window pre-applied (`assigned_to` = delegate,
 //!   `delegated_from` = original approver).
-//! - **decide** — engine-side authorization: the actor must BE the assigned approver, hold
-//!   an active delegation from them, or (role steps) carry the step's role ref. A reject
-//!   fails fast: the request is rejected and every other live pending step is skipped. An
-//!   approve marks the member row; a step completes when ALL its live members approved,
-//!   then the chain advances (or finishes `approved`).
+//! - **decide** — engine-side authorization: the actor must BE the assigned approver or
+//!   hold an active delegation from them. A reject fails fast: the request is rejected and
+//!   every other live pending step is skipped. An approve marks the member row; a step
+//!   completes when ALL its live members approved, then the chain advances (or finishes
+//!   `approved`).
 //! - **status** — the raw engine verdict; consumer adapters translate into their own Verdict
 //!   enums at the seam.
 //! - **withdraw** — requester-only; a pending request is withdrawn AND soft-deleted, which
@@ -65,13 +65,12 @@ pub struct FilingOutcome {
     pub already_filed: bool,
 }
 
-/// The deciding principal, as the HOST vouches for them. `role_refs` are the role ids the
-/// host's auth layer says the actor holds — the trust boundary is the host's token, not
-/// this struct.
+/// The deciding principal, as the HOST vouches for them. Authorization is checked
+/// engine-side against the materialized rows (assigned approver or a live delegation
+/// window); no client-supplied claim influences it.
 #[derive(Debug, Clone)]
 pub struct ApproverActor {
     pub employee_id: Uuid,
-    pub role_refs: Vec<Uuid>,
 }
 
 /// One decision on one step.
@@ -85,15 +84,24 @@ pub struct Decision {
     pub comment: Option<String>,
 }
 
-/// Resolves the dynamic approver kinds a policy template may name. The engine ships only
-/// [`FailClosedResolver`]: without a host-supplied resolver, any policy naming a dynamic
-/// kind fails the filing closed (422 `step_resolution_failed`) rather than guessing.
+/// Resolves the dynamic approver kinds a policy template may name.
+///
+/// `manager_of` / `department_head_of` are single approvers by shape (one active
+/// employment → one line manager; one department → one head) — when a host genuinely has
+/// co-heads, `Err` is the fail-closed answer: the filing refuses typed rather than the
+/// engine silently picking. `role_holders` / `position_holders` return EVERY current
+/// holder — the engine materializes one member row per holder and the step is
+/// any-holder (the first approval completes it; see `decide`).
+///
+/// The engine ships only [`FailClosedResolver`]: without a host-supplied resolver, any
+/// policy naming a dynamic kind fails the filing closed (422 `step_resolution_failed`)
+/// rather than guessing.
 #[async_trait::async_trait]
 pub trait ApproverResolver: Send + Sync {
     async fn manager_of(&self, company: Uuid, requester: Uuid) -> Result<Uuid, String>;
     async fn department_head_of(&self, company: Uuid, requester: Uuid) -> Result<Uuid, String>;
-    async fn role_holder(&self, company: Uuid, role: Uuid) -> Result<Uuid, String>;
-    async fn position_holder(&self, company: Uuid, position: Uuid) -> Result<Uuid, String>;
+    async fn role_holders(&self, company: Uuid, role: Uuid) -> Result<Vec<Uuid>, String>;
+    async fn position_holders(&self, company: Uuid, position: Uuid) -> Result<Vec<Uuid>, String>;
 }
 
 /// The shipped resolver: every dynamic kind is a hard error. Wire a real one via
@@ -108,10 +116,10 @@ impl ApproverResolver for FailClosedResolver {
     async fn department_head_of(&self, _company: Uuid, _requester: Uuid) -> Result<Uuid, String> {
         Err("department_head resolution requires a host-supplied ApproverResolver".into())
     }
-    async fn role_holder(&self, _company: Uuid, _role: Uuid) -> Result<Uuid, String> {
+    async fn role_holders(&self, _company: Uuid, _role: Uuid) -> Result<Vec<Uuid>, String> {
         Err("role resolution requires a host-supplied ApproverResolver".into())
     }
-    async fn position_holder(&self, _company: Uuid, _position: Uuid) -> Result<Uuid, String> {
+    async fn position_holders(&self, _company: Uuid, _position: Uuid) -> Result<Vec<Uuid>, String> {
         Err("position resolution requires a host-supplied ApproverResolver".into())
     }
 }
@@ -409,23 +417,40 @@ impl ApprovalsWriteService {
                 let role = template
                     .approver_ref
                     .ok_or(ApprovalsError::MissingApproverRef)?;
-                let holder = self
+                let holders = self
                     .resolver
-                    .role_holder(template.company_id, role)
+                    .role_holders(template.company_id, role)
                     .await
                     .map_err(ApprovalsError::StepResolutionFailed)?;
-                Ok(one(ApproverKind::Role, Some(role), holder))
+                // Every holder becomes a member row, each stamped with the template's
+                // role ref (the template identity decide-time semantics key on). Zero
+                // holders leaves the step without a member — validate_chain refuses.
+                Ok(holders
+                    .into_iter()
+                    .map(|holder| ResolvedMember {
+                        approver_kind: ApproverKind::Role,
+                        approver_ref: Some(role),
+                        assigned_to: holder,
+                    })
+                    .collect())
             }
             ApproverKind::Position => {
                 let position = template
                     .approver_ref
                     .ok_or(ApprovalsError::MissingApproverRef)?;
-                let holder = self
+                let holders = self
                     .resolver
-                    .position_holder(template.company_id, position)
+                    .position_holders(template.company_id, position)
                     .await
                     .map_err(ApprovalsError::StepResolutionFailed)?;
-                Ok(one(ApproverKind::Position, Some(position), holder))
+                Ok(holders
+                    .into_iter()
+                    .map(|holder| ResolvedMember {
+                        approver_kind: ApproverKind::Position,
+                        approver_ref: Some(position),
+                        assigned_to: holder,
+                    })
+                    .collect())
             }
         }
     }
@@ -533,8 +558,8 @@ impl ApprovalsWriteService {
             return Err(ApprovalsError::NoSuchStep);
         }
 
-        // Engine-side authorization per row: assigned approver, delegation FROM them, or the
-        // role ref the row was resolved from.
+        // Engine-side authorization per row: the assigned approver or a live delegation
+        // FROM them — nothing the client presented influences this.
         let mut authorized: Vec<&ApprovalStep> = Vec::new();
         for step in &steps {
             if self
@@ -557,25 +582,14 @@ impl ApprovalsWriteService {
             return Ok(request.status);
         };
 
-        // An actor deciding someone else's row did so via a live delegation window —
-        // stamp the authority source, matching the file-time pre-resolution stamp
-        // (`delegated_from` is always WHOSE authority the decider used, never the decider).
+        // An actor deciding someone else's row did so via a live delegation window
+        // (authorization is exactly assignee-or-delegation) — stamp the authority source,
+        // matching the file-time pre-resolution stamp (`delegated_from` is always WHOSE
+        // authority the decider used, never the decider).
         let inherited_from = if step.assigned_to == decision.actor.employee_id {
             None
-        } else if self
-            .repo
-            .delegation_exists_for(
-                &mut tx,
-                decision.company_id,
-                step.assigned_to,
-                decision.actor.employee_id,
-            )
-            .await?
-        {
-            Some(step.assigned_to)
         } else {
-            // Role-ref authorization: the actor is the role's holder, not a delegate.
-            None
+            Some(step.assigned_to)
         };
 
         if !decision.approve {
@@ -705,14 +719,6 @@ impl ApprovalsWriteService {
             .await?
         {
             return Ok(true);
-        }
-        // Role steps: the actor carries the very role this row was resolved from.
-        if step.approver_kind == ApproverKind::Role {
-            if let Some(role) = step.approver_ref {
-                if actor.role_refs.contains(&role) {
-                    return Ok(true);
-                }
-            }
         }
         Ok(false)
     }
