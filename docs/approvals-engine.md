@@ -121,8 +121,12 @@ composer for the same reason.
 - **Revoke does not re-route materialized rows.** Delegation resolves ONCE at
   file time (it reassigns then-materialized steps and stamps `delegated_from`);
   revoking later stops decide-time authorization and future filings but leaves
-  rows a filing already resolved in place. A revocation that must pull back an
-  in-flight chain is a withdraw-and-refile, not a delegation edit.
+  rows a filing already resolved in place — including their assignee: after a
+  revoke, the DELEGATE still decides a row the window routed to them, while the
+  approver no longer can (the row's `assigned_to` is the delegate; the engine
+  checks delegation from the assignee, not the original approver). Pulling back
+  an in-flight chain is the requester's withdraw-and-refile, not a delegation
+  edit — and it only works while the request is still pending.
 
 ## What this module does NOT ship
 
@@ -139,13 +143,25 @@ composer for the same reason.
 
 ## Composition duties (host-owned)
 
-- **Policy-admin RBAC.** The guarded surface exposes policy / step-template
-  CRUD authenticated only by tenant. WHO may define chains is the composing
-  app's decision (typically an operator role). Until the host has a
-  role-checking middleware, mount the CRUD routers NOT AT ALL (seed operator
-  master data in the database) — the rows are the authorization data the engine
-  trusts at decide time, and any employee able to write them can name themselves
-  approver or delegate themselves an approver's authority.
+- **Policy-admin RBAC.** Policy / step-template CRUD (the
+  [`create_operator_master_data_routes`] composer, or the per-entity
+  `*_write_routes` composers it is built from) authenticates only the tenant.
+  WHO may define chains is the composing app's decision (typically an operator
+  role). Until the host has a role-checking middleware, mount the CRUD routers
+  NOT AT ALL (seed operator master data in the database) — the rows are the
+  authorization data the engine trusts at decide time, and any employee able to
+  write them can name themselves approver or delegate themselves an approver's
+  authority.
+- **Never mount the generated generic routers.** The schema generator also
+  emits per-entity route modules and aggregate composers (`routes::mod`
+  `create_stateless_routes`, `all_crud_routes`, `routes()`), which mount
+  tenant-fenced-only CRUD on EVERY entity — including delegations (undoing the
+  self-service consent model) and the engine's own request/step rows (writing
+  verdicts around `decide`). Those files are generator-owned and cannot carry
+  this warning themselves. The only production-safe surfaces are
+  [`create_guarded_approvals_routes`] (behind `company_auth`) plus
+  [`create_operator_master_data_routes`] (behind the host's RBAC gate);
+  `readonly_routes()` is safe as a read base.
 - **Approver resolution is host-owned.** The engine resolves `manager`,
   `department_head`, `role`, and `position` templates through the
   `ApproverResolver` the host wires via `with_resolver`; without one those
