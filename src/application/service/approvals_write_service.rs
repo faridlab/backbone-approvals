@@ -13,9 +13,13 @@
 //!   `delegated_from` = original approver).
 //! - **decide** — engine-side authorization: the actor must BE the assigned approver or
 //!   hold an active delegation from them. A reject fails fast: the request is rejected and
-//!   every other live pending step is skipped. An approve marks the member row; a step
-//!   completes when ALL its live members approved, then the chain advances (or finishes
-//!   `approved`).
+//!   every other live pending step is skipped. An approve marks the member row, and a
+//!   step's completion regime depends on where its rows came from:
+//!   `specific_employee` / `manager` / `department_head` / `all_of` members are an
+//!   every-row quorum — the step completes when ALL its live members approved;
+//!   `role` / `position` templates are ANY-HOLDER — one holder's approval completes
+//!   the group (the sibling rows are recorded `skipped`). Then the chain advances (or
+//!   finishes `approved`).
 //! - **status** — the raw engine verdict; consumer adapters translate into their own Verdict
 //!   enums at the seam.
 //! - **withdraw** — requester-only; a pending request is withdrawn AND soft-deleted, which
@@ -332,8 +336,7 @@ impl ApprovalsWriteService {
                         // chain fault, not a raw 500.
                         Err(e) if is_unique_violation(&e) => {
                             return Err(ApprovalsError::InvalidChain(
-                                "two members of one step resolve to the same approver"
-                                    .to_string(),
+                                "two members of one step resolve to the same approver".to_string(),
                             ))
                         }
                         Err(e) => return Err(e.into()),
@@ -458,8 +461,9 @@ impl ApprovalsWriteService {
     /// A chain is walkable only when its distinct step numbers are exactly 1..=max, every
     /// step holds at least one materialized member, and no approver appears twice within
     /// one step once delegations are applied. Everything else parks the request on a step
-    /// no live row covers. Several templates MAY share a step number (an and-composition
-    /// at that step); the walk only cares about the distinct numbers.
+    /// no live row covers. The templates' partial unique on (policy_id, step_no) keeps
+    /// one live template per step number; the walk still dedups defensively and only
+    /// cares about the distinct numbers.
     fn validate_chain(
         templates: &[crate::domain::entity::ApprovalStepTemplate],
         rows: &[ApprovalStep],
@@ -652,7 +656,32 @@ impl ApprovalsWriteService {
             )
             .await?;
 
-        // The step completes when every live member row is approved.
+        // Role/position steps are ANY-HOLDER: every sibling row of the same template
+        // (same step_no, kind, and approver_ref) is decided by this one approval —
+        // record them as skipped so the row answers why its holder never decided.
+        // The other kinds (specific / manager / department-head / all_of members) are
+        // every-row quorums and keep their siblings pending.
+        if matches!(
+            step.approver_kind,
+            ApproverKind::Role | ApproverKind::Position
+        ) {
+            self.repo
+                .skip_sibling_pending_steps(
+                    &mut tx,
+                    decision.company_id,
+                    decision.request_id,
+                    decision.step_no,
+                    step.approver_kind,
+                    step.approver_ref,
+                    step.id,
+                    now,
+                )
+                .await?;
+        }
+
+        // The step completes when every live member row is approved — for a role or
+        // position template the sibling skip already cleared the group, so this
+        // countdown reaches zero on the first holder's approval.
         let remaining = self
             .repo
             .count_pending_steps_at(

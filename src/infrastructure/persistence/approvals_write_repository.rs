@@ -342,6 +342,49 @@ impl ApprovalsWriteRepository {
         Ok(())
     }
 
+    /// Skip the still-pending sibling rows of one template group: same step number,
+    /// same `approver_kind`, same `approver_ref` (the template identity), every row
+    /// except the one that just approved. Role/position steps are any-holder — the
+    /// first approval completes the group. The partial unique on
+    /// `(policy_id, step_no)` keeps one live template per step number, so keying on
+    /// the full identity is exact by construction; it stays as defense so rows from
+    /// distinct template origins can never skip each other even if that index were
+    /// relaxed.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn skip_sibling_pending_steps(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        company: Uuid,
+        request_id: Uuid,
+        step_no: i32,
+        approver_kind: crate::domain::entity::ApproverKind,
+        approver_ref: Option<Uuid>,
+        except: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"UPDATE approvals.approval_steps SET
+                   status = 'skipped',
+                   acted_at = $7,
+                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($7::timestamptz))
+               WHERE company_id = $1 AND request_id = $2 AND step_no = $3
+                 AND approver_kind = $4 AND approver_ref IS NOT DISTINCT FROM $5
+                 AND id <> $6
+                 AND status = 'pending'
+                 AND (metadata->>'deleted_at') IS NULL"#,
+        )
+        .bind(company)
+        .bind(request_id)
+        .bind(step_no)
+        .bind(approver_kind)
+        .bind(approver_ref)
+        .bind(except)
+        .bind(now)
+        .execute(&mut *conn)
+        .await?;
+        Ok(())
+    }
+
     /// Advance the chain to the next step (all live members of the current one approved).
     /// None when a concurrent decider advanced/finished first — the caller re-reads.
     pub async fn set_current_step(

@@ -644,10 +644,404 @@ async fn decide_time_delegation_stamps_the_authority_source() {
 }
 
 // ─── 8: dynamic kinds resolve through the host resolver ──────────────────────
-//
-// The multi-holder probes (role/position materialization + any-holder
-// completion) live below with their MapResolver fixture; the fail-closed
-// default is pinned by probe 12.
+
+/// Resolves dynamic kinds from fixed values — the shape a real host resolver
+/// derives from org structure. Manager/department-head are single employees;
+/// roles/positions resolve to every current holder.
+struct MapResolver {
+    manager: Uuid,
+    department_head: Uuid,
+    roles: std::collections::HashMap<Uuid, Vec<Uuid>>,
+    positions: std::collections::HashMap<Uuid, Vec<Uuid>>,
+}
+
+impl MapResolver {
+    fn new(manager: Uuid, department_head: Uuid) -> Self {
+        Self {
+            manager,
+            department_head,
+            roles: Default::default(),
+            positions: Default::default(),
+        }
+    }
+
+    fn with_role(mut self, role: Uuid, holders: Vec<Uuid>) -> Self {
+        self.roles.insert(role, holders);
+        self
+    }
+
+    fn with_position(mut self, position: Uuid, holders: Vec<Uuid>) -> Self {
+        self.positions.insert(position, holders);
+        self
+    }
+}
+
+#[async_trait::async_trait]
+impl ApproverResolver for MapResolver {
+    async fn manager_of(&self, _c: Uuid, _r: Uuid) -> Result<Uuid, String> {
+        Ok(self.manager)
+    }
+    async fn department_head_of(&self, _c: Uuid, _r: Uuid) -> Result<Uuid, String> {
+        Ok(self.department_head)
+    }
+    async fn role_holders(&self, _c: Uuid, role: Uuid) -> Result<Vec<Uuid>, String> {
+        Ok(self.roles.get(&role).cloned().unwrap_or_default())
+    }
+    async fn position_holders(&self, _c: Uuid, position: Uuid) -> Result<Vec<Uuid>, String> {
+        Ok(self.positions.get(&position).cloned().unwrap_or_default())
+    }
+}
+
+/// The (kind, ref) a step row was materialized from, by its assignee.
+async fn step_kind_ref(
+    pool: &PgPool,
+    company: Uuid,
+    request: Uuid,
+    assigned_to: Uuid,
+) -> (String, Option<Uuid>) {
+    let row: (String, Option<Uuid>) = sqlx::query_as(
+        r#"SELECT approver_kind::text, approver_ref FROM approvals.approval_steps
+            WHERE company_id = $1 AND request_id = $2 AND assigned_to = $3
+              AND (metadata->>'deleted_at') IS NULL"#,
+    )
+    .bind(company)
+    .bind(request)
+    .bind(assigned_to)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    row
+}
+
+#[tokio::test]
+async fn resolver_materializes_the_dynamic_chain_once() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let manager = Uuid::new_v4();
+    let head = Uuid::new_v4();
+    let role = Uuid::new_v4();
+    let role_holder = Uuid::new_v4();
+    let position = Uuid::new_v4();
+    let position_holder = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        1,
+        "manager_of_requester",
+        None,
+        None,
+    )
+    .await;
+    seed_template(&pool, company, policy, 2, "department_head", None, None).await;
+    seed_template(&pool, company, policy, 3, "role", Some(role), None).await;
+    seed_template(&pool, company, policy, 4, "position", Some(position), None).await;
+
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(manager, head)
+            .with_role(role, vec![role_holder])
+            .with_position(position, vec![position_holder]),
+    ));
+    let outcome = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+    assert_eq!(outcome.verdict, ApprovalStatus::Pending);
+    assert_eq!(count_steps(&pool, company, outcome.request_id).await, 4);
+
+    // Single-approver kinds carry no ref; multi-holder kinds keep the template id
+    // (the identity decide-time semantics key on).
+    assert_eq!(
+        step_kind_ref(&pool, company, outcome.request_id, manager).await,
+        ("manager_of_requester".into(), None)
+    );
+    assert_eq!(
+        step_kind_ref(&pool, company, outcome.request_id, head).await,
+        ("department_head".into(), None)
+    );
+    assert_eq!(
+        step_kind_ref(&pool, company, outcome.request_id, role_holder).await,
+        ("role".into(), Some(role))
+    );
+    assert_eq!(
+        step_kind_ref(&pool, company, outcome.request_id, position_holder).await,
+        ("position".into(), Some(position))
+    );
+}
+
+#[tokio::test]
+async fn role_step_materializes_one_row_per_holder() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let role = Uuid::new_v4();
+    let h1 = Uuid::new_v4();
+    let h2 = Uuid::new_v4();
+    let h3 = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 1, "role", Some(role), None).await;
+
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(Uuid::new_v4(), Uuid::new_v4()).with_role(role, vec![h1, h2, h3]),
+    ));
+    let outcome = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+    assert_eq!(count_steps(&pool, company, outcome.request_id).await, 3);
+    for h in [h1, h2, h3] {
+        assert_eq!(
+            step_kind_ref(&pool, company, outcome.request_id, h).await,
+            ("role".into(), Some(role)),
+            "every holder row carries the same template identity"
+        );
+    }
+}
+
+#[tokio::test]
+async fn any_holder_first_approve_completes_and_skips_siblings() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let role = Uuid::new_v4();
+    let h1 = Uuid::new_v4();
+    let h2 = Uuid::new_v4();
+    let h3 = Uuid::new_v4();
+    let step2 = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 1, "role", Some(role), None).await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        2,
+        "specific_employee",
+        Some(step2),
+        None,
+    )
+    .await;
+
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(Uuid::new_v4(), Uuid::new_v4()).with_role(role, vec![h1, h2, h3]),
+    ));
+    let outcome = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+
+    // ONE holder approves: the step completes, the chain advances.
+    let verdict = svc
+        .decide(decide_as(company, outcome.request_id, 1, h1, true))
+        .await
+        .unwrap();
+    assert_eq!(verdict, ApprovalStatus::Pending, "chain advances to step 2");
+    let request = svc.get_request(company, outcome.request_id).await.unwrap();
+    assert_eq!(request.current_step, Some(2));
+
+    // The sibling rows are recorded skipped — the row answers why its holder
+    // never decided.
+    for h in [h2, h3] {
+        assert_eq!(
+            step_row(&pool, company, outcome.request_id, h).await.0,
+            "skipped"
+        );
+    }
+    assert_eq!(
+        step_row(&pool, company, outcome.request_id, h1).await.0,
+        "approved"
+    );
+
+    // A late sibling decide is the usual out-of-turn 409, not a state change.
+    let err = svc
+        .decide(decide_as(company, outcome.request_id, 1, h2, true))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::OutOfTurn));
+
+    // The chain still finishes through step 2.
+    let verdict = svc
+        .decide(decide_as(company, outcome.request_id, 2, step2, true))
+        .await
+        .unwrap();
+    assert_eq!(verdict, ApprovalStatus::Approved);
+}
+
+#[tokio::test]
+async fn any_holder_reject_fails_the_request() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let role = Uuid::new_v4();
+    let h1 = Uuid::new_v4();
+    let h2 = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 1, "role", Some(role), None).await;
+
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(Uuid::new_v4(), Uuid::new_v4()).with_role(role, vec![h1, h2]),
+    ));
+    let outcome = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+
+    let verdict = svc
+        .decide(decide_as(company, outcome.request_id, 1, h2, false))
+        .await
+        .unwrap();
+    assert_eq!(verdict, ApprovalStatus::Rejected);
+    assert_eq!(
+        step_row(&pool, company, outcome.request_id, h1).await.0,
+        "skipped"
+    );
+    assert_eq!(
+        step_row(&pool, company, outcome.request_id, h2).await.0,
+        "rejected"
+    );
+}
+
+#[tokio::test]
+async fn position_steps_are_any_holder_too() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let position = Uuid::new_v4();
+    let p1 = Uuid::new_v4();
+    let p2 = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 1, "position", Some(position), None).await;
+
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(Uuid::new_v4(), Uuid::new_v4()).with_position(position, vec![p1, p2]),
+    ));
+    let outcome = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+    assert_eq!(count_steps(&pool, company, outcome.request_id).await, 2);
+
+    let verdict = svc
+        .decide(decide_as(company, outcome.request_id, 1, p2, true))
+        .await
+        .unwrap();
+    assert_eq!(verdict, ApprovalStatus::Approved);
+    assert_eq!(
+        step_row(&pool, company, outcome.request_id, p1).await.0,
+        "skipped"
+    );
+    assert_eq!(
+        step_row(&pool, company, outcome.request_id, p2).await.0,
+        "approved"
+    );
+}
+
+#[tokio::test]
+async fn role_with_no_holders_fails_closed() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let role = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 1, "role", Some(role), None).await;
+
+    // The resolver knows the role — it just has no holders right now.
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(Uuid::new_v4(), Uuid::new_v4()).with_role(role, vec![]),
+    ));
+    let err = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::InvalidChain(_)), "{err}");
+    assert_eq!(err.code(), "invalid_approval_chain");
+    assert_eq!(err.http_status(), 422);
+
+    let n: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM approvals.approval_requests WHERE company_id = $1"#,
+    )
+    .bind(company)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 0, "a holder-less role leaves no request behind");
+}
+
+#[tokio::test]
+async fn second_live_template_at_one_step_no_is_refused() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        1,
+        "role",
+        Some(Uuid::new_v4()),
+        None,
+    )
+    .await;
+
+    // The partial unique idx_approval_step_templates_policy_id_step_no keeps ONE
+    // live template per (policy, step_no): a step number is always a single
+    // template's regime — one named approver, one all_of quorum, or one
+    // any-holder group. Composition across regimes at one number is an
+    // authoring-time refusal (compose with more step numbers, not stacked
+    // templates), not a state the engine ever has to reconcile.
+    let err = pool
+        .execute(
+            sqlx::query(
+                r#"INSERT INTO approvals.approval_step_templates
+                       (id, company_id, policy_id, step_no, approver_kind, approver_ref,
+                        all_of, sla_hours, metadata)
+                   VALUES ($1, $2, $3, 1, 'role', $4, NULL, NULL, '{}'::jsonb)"#,
+            )
+            .bind(Uuid::new_v4())
+            .bind(company)
+            .bind(policy)
+            .bind(Uuid::new_v4()),
+        )
+        .await
+        .unwrap_err();
+    let code = err
+        .as_database_error()
+        .and_then(|d| d.code())
+        .map(|c| c.to_string())
+        .unwrap_or_default();
+    assert_eq!(
+        code, "23505",
+        "a second live template at one step is refused"
+    );
+
+    // Soft-deleting the first frees the slot — replacing a step is deactivate-then-add,
+    // the same discipline the single-active-policy index imposes one level up.
+    sqlx::query(
+        r#"UPDATE approvals.approval_step_templates
+              SET metadata = metadata || '{"deleted_at": "2026-01-01T00:00:00Z"}'::jsonb
+            WHERE company_id = $1 AND policy_id = $2"#,
+    )
+    .bind(company)
+    .bind(policy)
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.execute(
+        sqlx::query(
+            r#"INSERT INTO approvals.approval_step_templates
+                   (id, company_id, policy_id, step_no, approver_kind, approver_ref,
+                    all_of, sla_hours, metadata)
+               VALUES ($1, $2, $3, 1, 'role', $4, NULL, NULL, '{}'::jsonb)"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(company)
+        .bind(policy)
+        .bind(Uuid::new_v4()),
+    )
+    .await
+    .unwrap();
+}
 
 // ─── 9: cross-tenant is 404, both directions ─────────────────────────────────
 
@@ -1032,8 +1426,26 @@ async fn chain_with_a_step_gap_fails_at_file() {
     let pool = pool().await;
     let company = Uuid::new_v4();
     let policy = seed_policy(&pool, company, "leave").await;
-    seed_template(&pool, company, policy, 1, "specific_employee", Some(Uuid::new_v4()), None).await;
-    seed_template(&pool, company, policy, 3, "specific_employee", Some(Uuid::new_v4()), None).await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        1,
+        "specific_employee",
+        Some(Uuid::new_v4()),
+        None,
+    )
+    .await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        3,
+        "specific_employee",
+        Some(Uuid::new_v4()),
+        None,
+    )
+    .await;
 
     let svc = ApprovalsWriteService::new(pool.clone());
     let err = svc
@@ -1049,7 +1461,16 @@ async fn chain_not_starting_at_one_fails_at_file() {
     let pool = pool().await;
     let company = Uuid::new_v4();
     let policy = seed_policy(&pool, company, "leave").await;
-    seed_template(&pool, company, policy, 2, "specific_employee", Some(Uuid::new_v4()), None).await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        2,
+        "specific_employee",
+        Some(Uuid::new_v4()),
+        None,
+    )
+    .await;
 
     let svc = ApprovalsWriteService::new(pool.clone());
     let err = svc
@@ -1106,9 +1527,28 @@ async fn quorum_sharing_one_delegate_fails_at_file() {
         Some(serde_json::json!([member_a, member_b])),
     )
     .await;
-    let window = (chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(), chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap());
-    seed_delegation(&pool, company, member_a, shared_delegate, window.0, window.1).await;
-    seed_delegation(&pool, company, member_b, shared_delegate, window.0, window.1).await;
+    let window = (
+        chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+        chrono::NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+    );
+    seed_delegation(
+        &pool,
+        company,
+        member_a,
+        shared_delegate,
+        window.0,
+        window.1,
+    )
+    .await;
+    seed_delegation(
+        &pool,
+        company,
+        member_b,
+        shared_delegate,
+        window.0,
+        window.1,
+    )
+    .await;
 
     let svc = ApprovalsWriteService::new(pool.clone());
     let err = svc
@@ -1159,7 +1599,10 @@ async fn second_active_policy_for_a_resource_is_refused() {
         .and_then(|d| d.code())
         .map(|c| c.to_string())
         .unwrap_or_default();
-    assert_eq!(code, "23505", "second active policy must trip the partial unique");
+    assert_eq!(
+        code, "23505",
+        "second active policy must trip the partial unique"
+    );
 
     // Deactivating the first frees the slot — the replacement activates cleanly.
     sqlx::query("UPDATE approvals.approval_policies SET is_active = false WHERE company_id = $1")

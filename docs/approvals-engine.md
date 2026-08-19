@@ -71,9 +71,23 @@ engine owns every state change after that.
      `delegated_from` on the decided row).
 - **Reject fails fast.** One rejection decides the request `rejected` and
   skips every other pending step row — siblings never linger.
-- **Approve counts down a quorum.** Each member row approves individually; the
-  step (and only then the chain) advances when no live member row remains
-  pending. Sequential templates gate naturally: step *n+1* rows exist from
+- **Approve completes by regime.** Which rows a step needs depends on where
+  they came from:
+
+  | Step rows | Regime |
+  |---|---|
+  | `specific_employee`, `manager`, `department_head`, `all_of` members | **Every row** — a quorum; the step advances when no live member row remains pending. |
+  | `role` / `position` template groups | **Any holder** — one holder's approval completes the group; the sibling rows are recorded `skipped` (the row answers why its holder never decided). A late sibling decide is the usual 409. |
+
+  The skip is keyed on the full template identity (step number + kind +
+  `approver_ref`). The partial unique index on `approval_step_templates
+  (policy_id, step_no)` already keeps one live template per step number — a
+  step is always a single template's regime, never a mix — so within one step
+  the identity keying is exact by construction and stays exact as defense if
+  rows from distinct origins ever share a number (soft-deleted template
+  replaced at the same step, a relaxed index). Steps that must compose
+  (quorum AND any-holder) are separate step numbers, decided in sequence.
+- **Sequential templates gate naturally.** Step *n+1* rows exist from
   filing but the chain's `current_step` only reaches them after step *n*
   completes.
 - **Concurrent deciders converge.** Advance/finish/withdraw row updates return
