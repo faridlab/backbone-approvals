@@ -1230,6 +1230,21 @@ async fn concurrent_filings_converge_on_one_request() {
     let company = Uuid::new_v4();
     let employee = Uuid::new_v4();
     let resource = Uuid::new_v4();
+    // A live policy with an all_of quorum: the race's loser must converge on the
+    // winner's ALREADY-MATERIALIZED steps, never insert its own copy.
+    let m1 = Uuid::new_v4();
+    let m2 = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        1,
+        "specific_employee",
+        None,
+        Some(serde_json::json!([m1, m2])),
+    )
+    .await;
     let svc = Arc::new(engine(&pool));
 
     let (o1, o2, o3, o4) = tokio::join!(
@@ -1247,12 +1262,14 @@ async fn concurrent_filings_converge_on_one_request() {
         "at least one filing created the row"
     );
 
-    // The winner's steps materialized exactly once (no duplicated quorum rows).
+    // The winner's steps materialized exactly once: two quorum members, one row
+    // each — a loser that raced past the re-select would have doubled them (the
+    // quorum unique would have surfaced as a typed chain fault instead).
     let id = outcomes[0].request_id;
     assert_eq!(
         count_steps(&pool, company, id).await,
-        0,
-        "no policy: zero steps"
+        2,
+        "the quorum materialized exactly once"
     );
 }
 
