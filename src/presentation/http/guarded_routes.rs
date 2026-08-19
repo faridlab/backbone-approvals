@@ -2,9 +2,9 @@
 //!
 //! Hand-authored (user-owned; see `metaphor.codegen.yaml`). Splits the surface by actor:
 //!
-//! - **Operator master data**: policy / step-template full generated CRUD — defining
-//!   chains is an operator surface. WHO may operate it is the composing app's RBAC
-//!   decision (documented host duty; this module only authenticates the tenant).
+//! - **Guarded surface** ([`create_guarded_approvals_routes`]): engine verbs, the
+//!   self-service delegation pair, and request/step reads — safe behind plain tenant
+//!   auth, because every mutation's authorization is engine-side.
 //! - **Request + step reads**: GETs only. No generic mutation reaches the engine's rows —
 //!   the engine verbs own every state change.
 //! - **Engine verbs**: `POST /approvals/requests/:id/decide`,
@@ -13,6 +13,10 @@
 //!   [`ApprovalsWriteService`], whose decide-time authorization is ENGINE-side
 //!   (assigned approver / live delegation window) and whose delegating principal is
 //!   always the token's `sub` — no client-supplied claim influences either.
+//! - **Operator master data** ([`create_operator_master_data_routes`]): policy /
+//!   step-template CRUD, kept OUT of the guarded surface on purpose — those rows are
+//!   the authorization data the engine trusts, so they mount only behind a host's own
+//!   RBAC gate (typically an operator role).
 //!
 //! The tenant comes from the [`CompanyContext`] the `company_auth` middleware inserts —
 //! never from the body. Composers MUST mount this behind `company_auth` with the
@@ -261,21 +265,15 @@ fn engine_verbs(svc: Arc<ApprovalsWriteService>) -> Router {
         .with_state(svc)
 }
 
-/// The guarded approvals surface. `file` is deliberately NOT here — consumers file through
-/// their own seam adapters (their verbs own the resource link); this surface is for
-/// approvers and operators. Delegation rows are written ONLY by the self-service verbs
-/// (the generic delegation CRUD stays unmounted: consent cannot be authored on
-/// someone else's behalf).
+/// The guarded approvals surface — SAFE behind plain tenant auth (`company_auth`):
+/// engine verbs, self-service delegation, and reads. It deliberately carries NO
+/// operator master data: policy and step-template rows are the authorization data
+/// the engine trusts at decide time, so their CRUD lives in
+/// [`create_operator_master_data_routes`], which a host mounts behind its own RBAC
+/// gate. `file` is also not here — consumers file through their own seam adapters.
 pub fn create_guarded_approvals_routes(m: &ApprovalsModule) -> Router {
     Router::new()
-        // Operator master data: full generated CRUD (authorization is a host duty).
-        .merge(create_approval_policy_routes(
-            m.approval_policy_service.clone(),
-        ))
-        .merge(create_approval_step_template_routes(
-            m.approval_step_template_service.clone(),
-        ))
-        // Engine rows: reads only, plus the verbs above.
+        // Engine rows: reads only, plus the verbs.
         .merge(create_approval_request_read_routes(
             m.approval_request_service.clone(),
         ))
@@ -283,6 +281,22 @@ pub fn create_guarded_approvals_routes(m: &ApprovalsModule) -> Router {
             m.approval_step_service.clone(),
         ))
         .merge(engine_verbs(m.approvals_write_service.clone()))
+}
+
+/// Operator master data: full policy / step-template CRUD. These rows ARE the
+/// engine's authorization data — anyone who can write them can name themselves
+/// approver on a policy the engine will trust. This composer authenticates ONLY the
+/// tenant; a host MUST mount it behind its own role-checking middleware (an operator
+/// role) and MUST NOT mount it bare. Until such a gate exists, leave this unmounted
+/// and seed operator master data directly in the database.
+pub fn create_operator_master_data_routes(m: &ApprovalsModule) -> Router {
+    Router::new()
+        .merge(create_approval_policy_routes(
+            m.approval_policy_service.clone(),
+        ))
+        .merge(create_approval_step_template_routes(
+            m.approval_step_template_service.clone(),
+        ))
 }
 
 /// Convenience for hosts that build their own engine (e.g. with a resolver): the same

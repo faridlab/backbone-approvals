@@ -42,9 +42,11 @@ pub use application::service::DelegationService;
 pub use application::workflows::*;
 
 // <<< CUSTOM
-// The guarded composition (operator CRUD + engine reads + decide/withdraw verbs).
+// The guarded composition (engine verbs + reads) and the operator master-data
+// composer a host mounts behind its own RBAC gate.
 pub use presentation::http::guarded_routes::{
     create_guarded_approvals_routes, create_guarded_approvals_routes_with,
+    create_operator_master_data_routes,
 };
 // END CUSTOM
 

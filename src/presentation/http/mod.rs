@@ -15,7 +15,10 @@ pub mod delegation_handler;
 // The guarded composition (operator CRUD + engine reads + decide/withdraw verbs).
 // Hand-authored (see metaphor.codegen.yaml user_owned).
 pub mod guarded_routes;
-pub use guarded_routes::{create_guarded_approvals_routes, create_guarded_approvals_routes_with};
+pub use guarded_routes::{
+    create_guarded_approvals_routes, create_guarded_approvals_routes_with,
+    create_operator_master_data_routes,
+};
 // END CUSTOM
 
 // Re-exports
