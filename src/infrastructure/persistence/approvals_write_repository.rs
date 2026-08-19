@@ -18,6 +18,7 @@ use crate::domain::entity::{
     ApprovalStepStatus, ApprovalStepTemplate,
 };
 
+#[derive(Clone)]
 pub struct ApprovalsWriteRepository;
 
 impl ApprovalsWriteRepository {
@@ -209,6 +210,89 @@ impl ApprovalsWriteRepository {
         .bind(approver)
         .bind(delegate)
         .fetch_one(&mut *conn)
+        .await
+    }
+
+    /// One delegation row regardless of status (the revoke entrypoint; 404 when the
+    /// id is unknown or belongs to another tenant).
+    pub async fn get_delegation(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        company: Uuid,
+        delegation_id: Uuid,
+    ) -> Result<Option<crate::domain::entity::Delegation>, sqlx::Error> {
+        sqlx::query_as::<_, crate::domain::entity::Delegation>(
+            r#"SELECT * FROM approvals.delegations
+                WHERE company_id = $1 AND id = $2
+                  AND (metadata->>'deleted_at') IS NULL"#,
+        )
+        .bind(company)
+        .bind(delegation_id)
+        .fetch_optional(&mut *conn)
+        .await
+    }
+
+    /// Insert a self-service delegation row (status active; audit stamps `created_by`
+    /// and `source` so the row records consent provenance).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn insert_delegation(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        company: Uuid,
+        id: Uuid,
+        approver: Uuid,
+        delegate_to: Uuid,
+        valid_from: chrono::NaiveDate,
+        valid_to: chrono::NaiveDate,
+        reason: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"INSERT INTO approvals.delegations
+                   (id, company_id, approver_id, delegate_to_id, valid_from, valid_to,
+                    reason, status, metadata)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, 'active',
+                       jsonb_build_object('created_by', to_jsonb($3::uuid),
+                                          'source', 'self_service'))"#,
+        )
+        .bind(id)
+        .bind(company)
+        .bind(approver)
+        .bind(delegate_to)
+        .bind(valid_from)
+        .bind(valid_to)
+        .bind(reason)
+        .execute(&mut *conn)
+        .await?;
+        Ok(())
+    }
+
+    /// Revoke a delegation — row-truth: only a still-active row matches, RETURNING
+    /// makes the concurrent/repeated revoke observable (the caller maps None to a
+    /// typed conflict). `revoked_at`/`revoked_by` ride the audit metadata.
+    pub async fn revoke_delegation(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        company: Uuid,
+        delegation_id: Uuid,
+        revoked_by: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<Option<Uuid>, sqlx::Error> {
+        sqlx::query_scalar(
+            r#"UPDATE approvals.delegations SET
+                   status = 'revoked',
+                   metadata = metadata || jsonb_build_object(
+                       'revoked_at', to_jsonb($4::timestamptz),
+                       'revoked_by', to_jsonb($3::uuid))
+               WHERE company_id = $1 AND id = $2
+                 AND status = 'active'
+                 AND (metadata->>'deleted_at') IS NULL
+               RETURNING id"#,
+        )
+        .bind(company)
+        .bind(delegation_id)
+        .bind(revoked_by)
+        .bind(now)
+        .fetch_optional(&mut *conn)
         .await
     }
 

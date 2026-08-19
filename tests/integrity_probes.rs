@@ -36,8 +36,8 @@ use backbone_approvals::application::service::{
     ApprovalsError, ApprovalsWriteService, ApproverActor, ApproverResolver, Decision, FileFiling,
 };
 use backbone_approvals::{
-    create_guarded_approvals_routes, ApprovalPriority, ApprovalResourceType, ApprovalStatus,
-    ApprovalsModule,
+    create_guarded_approvals_routes, create_guarded_approvals_routes_with, ApprovalPriority,
+    ApprovalResourceType, ApprovalStatus, ApprovalsModule,
 };
 use backbone_auth::company::{company_auth, CompanyVerifier};
 
@@ -1043,6 +1043,60 @@ async fn second_live_template_at_one_step_no_is_refused() {
     .unwrap();
 }
 
+/// Multi-holder surface keeps the one-decider-per-row invariant: when every holder
+/// of a role delegates to the SAME person, the step materializes two rows for one
+/// decider — a chain nobody else could ever contest. Filing refuses it as the same
+/// typed configuration fault a duplicated quorum member produces.
+#[tokio::test]
+async fn holders_sharing_one_delegate_fail_at_file() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let role = Uuid::new_v4();
+    let h1 = Uuid::new_v4();
+    let h2 = Uuid::new_v4();
+    let shared_delegate = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(&pool, company, policy, 1, "role", Some(role), None).await;
+    seed_delegation(
+        &pool,
+        company,
+        h1,
+        shared_delegate,
+        today() - chrono::Duration::days(1),
+        today() + chrono::Duration::days(7),
+    )
+    .await;
+    seed_delegation(
+        &pool,
+        company,
+        h2,
+        shared_delegate,
+        today() - chrono::Duration::days(1),
+        today() + chrono::Duration::days(7),
+    )
+    .await;
+
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(Uuid::new_v4(), Uuid::new_v4()).with_role(role, vec![h1, h2]),
+    ));
+    let err = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::InvalidChain(_)), "{err}");
+    assert_eq!(err.http_status(), 422);
+
+    let n: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM approvals.approval_requests WHERE company_id = $1"#,
+    )
+    .bind(company)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 0, "a colliding delegation set leaves no request behind");
+}
+
 // ─── 9: cross-tenant is 404, both directions ─────────────────────────────────
 
 #[tokio::test]
@@ -1387,7 +1441,261 @@ async fn guarded_routes_decide_with_engine_side_authorization() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
-// ─── 15: chain validity is enforced at file time ─────────────────────────────
+/// A decide body carrying `roleRefs` (the pre-consent authorization channel this
+/// engine removed) is inert: the field no longer exists on the wire shape, and a
+/// non-assignee presenting it authorizes nothing — engine-side 403, stable code.
+#[tokio::test]
+async fn decide_ignores_presented_role_refs() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let approver = Uuid::new_v4();
+    let claimant = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        1,
+        "specific_employee",
+        Some(approver),
+        None,
+    )
+    .await;
+
+    let svc = engine(&pool);
+    let outcome = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+    let m = module(&pool).await;
+    let app = create_guarded_approvals_routes(&m);
+
+    // The claimant "holds" a role id and presents it as their authorization.
+    let token = token_for(company, claimant);
+    let (status, body) = req(
+        app,
+        "POST",
+        &format!("/approvals/requests/{}/decide", outcome.request_id),
+        &token,
+        r#"{"stepNo":1,"decision":"approve","roleRefs":["11111111-1111-1111-1111-111111111111"]}"#
+            .into(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(body.contains("not_step_approver"), "body: {body}");
+
+    // The step is untouched.
+    assert_eq!(
+        step_row(&pool, company, outcome.request_id, approver)
+            .await
+            .0,
+        "pending"
+    );
+}
+
+// ─── 15: delegation is a principal-verb, not master data ─────────────────────
+//
+// A delegation row carries real authority — a live window lets the delegate decide
+// the approver's steps. The guarded surface exposes the lifecycle ONLY as
+// self-service verbs stamping the principal from the token: a body approverId is
+// inert, revoke is approver-only and row-truth, and revocation stops decide-time
+// authorization without re-routing rows a filing already resolved.
+
+fn today() -> chrono::NaiveDate {
+    chrono::Utc::now().date_naive()
+}
+
+#[tokio::test]
+async fn delegation_verb_stamps_the_principal_from_the_token() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let approver = Uuid::new_v4();
+    let delegate = Uuid::new_v4();
+    let impostor = Uuid::new_v4();
+    let app = create_guarded_approvals_routes_with(std::sync::Arc::new(engine(&pool)));
+
+    // A foreign approverId in the body grants nothing — the row stamps the token's sub.
+    let (status, body) = req(
+        app.clone(),
+        "POST",
+        "/approvals/delegations",
+        &token_for(company, approver),
+        serde_json::json!({
+            "approverId": impostor,
+            "delegateTo": delegate,
+            "validFrom": today(),
+            "validTo": today() + chrono::Duration::days(7),
+            "reason": "probe"
+        })
+        .to_string(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "body: {body}");
+    let id: Uuid = serde_json::from_str::<serde_json::Value>(&body).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    let (row_approver, source): (Uuid, String) = sqlx::query_as(
+        r#"SELECT approver_id, metadata->>'source' FROM approvals.delegations WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row_approver, approver, "the principal is the token's sub");
+    assert_eq!(source, "self_service");
+
+    // Self-delegation: 422, stable code.
+    let (status, body) = req(
+        app.clone(),
+        "POST",
+        "/approvals/delegations",
+        &token_for(company, approver),
+        serde_json::json!({
+            "delegateTo": approver,
+            "validFrom": today(),
+            "validTo": today() + chrono::Duration::days(7)
+        })
+        .to_string(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "body: {body}");
+    assert!(body.contains("self_delegation_refused"), "body: {body}");
+
+    // Inverted window: 422.
+    let (status, body) = req(
+        app,
+        "POST",
+        "/approvals/delegations",
+        &token_for(company, approver),
+        serde_json::json!({
+            "delegateTo": delegate,
+            "validFrom": today() + chrono::Duration::days(7),
+            "validTo": today()
+        })
+        .to_string(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "body: {body}");
+    assert!(body.contains("delegation_window_invalid"), "body: {body}");
+}
+
+#[tokio::test]
+async fn delegation_revoke_discipline_and_post_revoke_semantics() {
+    let pool = pool().await;
+    let company = Uuid::new_v4();
+    let employee = Uuid::new_v4();
+    let approver = Uuid::new_v4();
+    let delegate = Uuid::new_v4();
+    let stranger = Uuid::new_v4();
+    let policy = seed_policy(&pool, company, "leave").await;
+    seed_template(
+        &pool,
+        company,
+        policy,
+        1,
+        "specific_employee",
+        Some(approver),
+        None,
+    )
+    .await;
+
+    let svc = engine(&pool);
+    let app = create_guarded_approvals_routes_with(std::sync::Arc::new(svc.clone()));
+    let (status, body) = req(
+        app.clone(),
+        "POST",
+        "/approvals/delegations",
+        &token_for(company, approver),
+        serde_json::json!({
+            "delegateTo": delegate,
+            "validFrom": today() - chrono::Duration::days(1),
+            "validTo": today() + chrono::Duration::days(7)
+        })
+        .to_string(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "body: {body}");
+    let id: Uuid = serde_json::from_str::<serde_json::Value>(&body).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // While live: a filing pre-resolves the step onto the delegate.
+    let live = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+    let (assigned, inherited) = step_row(&pool, company, live.request_id, delegate).await;
+    assert_eq!(assigned, "pending");
+    assert_eq!(inherited, Some(approver));
+
+    // Stranger revoke: 403, stable code.
+    let (status, body) = req(
+        app.clone(),
+        "POST",
+        &format!("/approvals/delegations/{id}/revoke"),
+        &token_for(company, stranger),
+        String::new(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "body: {body}");
+    assert!(body.contains("not_delegation_approver"), "body: {body}");
+
+    // Approver revoke: 200, and the row flips.
+    let (status, body) = req(
+        app.clone(),
+        "POST",
+        &format!("/approvals/delegations/{id}/revoke"),
+        &token_for(company, approver),
+        String::new(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert!(body.contains("\"status\":\"revoked\""), "body: {body}");
+
+    // Double revoke: row-truth 409, not a silent second success.
+    let (status, body) = req(
+        app.clone(),
+        "POST",
+        &format!("/approvals/delegations/{id}/revoke"),
+        &token_for(company, approver),
+        String::new(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "body: {body}");
+    assert!(body.contains("delegation_not_active"), "body: {body}");
+
+    // The pre-resolved row from the live window STANDS: delegation resolves once at
+    // file, so the delegate still decides it (delegated_from already stamps provenance).
+    let verdict = svc
+        .decide(decide_as(company, live.request_id, 1, delegate, true))
+        .await
+        .unwrap();
+    assert_eq!(verdict, ApprovalStatus::Approved);
+
+    // A filing AFTER the revoke resolves onto the approver again…
+    let fresh = svc
+        .file(filing(company, Uuid::new_v4(), employee))
+        .await
+        .unwrap();
+    let (assigned, inherited) = step_row(&pool, company, fresh.request_id, approver).await;
+    assert_eq!(assigned, "pending");
+    assert_eq!(inherited, None);
+
+    // …and the delegate no longer holds decide-time authority over it: 403.
+    let err = svc
+        .decide(decide_as(company, fresh.request_id, 1, delegate, true))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ApprovalsError::NotStepApprover), "{err}");
+}
+
+// ─── 16: chain validity is enforced at file time ─────────────────────────────
 //
 // The engine walks step numbers from 1 one at a time. A chain that is empty, starts
 // above 1, skips a number, or resolves two members of one step onto the same approver
@@ -1568,7 +1876,7 @@ async fn quorum_sharing_one_delegate_fails_at_file() {
     assert_eq!(n, 0);
 }
 
-// ─── 16: one active policy per resource ──────────────────────────────────────
+// ─── 17: one active policy per resource ──────────────────────────────────────
 //
 // The partial unique index approval_policies_single_active refuses a second active
 // policy for the same (company, resource_type) — a replacement policy must deactivate

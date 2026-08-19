@@ -2,16 +2,17 @@
 //!
 //! Hand-authored (user-owned; see `metaphor.codegen.yaml`). Splits the surface by actor:
 //!
-//! - **Operator master data**: policy / step-template / delegation full generated CRUD —
-//!   defining chains and delegation windows is an operator surface. WHO may operate it is
-//!   the composing app's RBAC decision (documented host duty; this module only authenticates
-//!   the tenant).
+//! - **Operator master data**: policy / step-template full generated CRUD — defining
+//!   chains is an operator surface. WHO may operate it is the composing app's RBAC
+//!   decision (documented host duty; this module only authenticates the tenant).
 //! - **Request + step reads**: GETs only. No generic mutation reaches the engine's rows —
 //!   the engine verbs own every state change.
-//! - **Engine verbs**: `POST /approvals/requests/:id/decide` and
-//!   `POST /approvals/requests/:id/withdraw` over [`ApprovalsWriteService`], whose
-//!   decide-time authorization is ENGINE-side (assigned approver / live delegation
-//!   window) — no client-supplied claim influences it.
+//! - **Engine verbs**: `POST /approvals/requests/:id/decide`,
+//!   `POST /approvals/requests/:id/withdraw`, and the self-service delegation pair
+//!   `POST /approvals/delegations` + `POST /approvals/delegations/:id/revoke` over
+//!   [`ApprovalsWriteService`], whose decide-time authorization is ENGINE-side
+//!   (assigned approver / live delegation window) and whose delegating principal is
+//!   always the token's `sub` — no client-supplied claim influences either.
 //!
 //! The tenant comes from the [`CompanyContext`] the `company_auth` middleware inserts —
 //! never from the body. Composers MUST mount this behind `company_auth` with the
@@ -40,7 +41,6 @@ use crate::ApprovalsModule;
 use super::{
     create_approval_policy_routes, create_approval_request_read_routes,
     create_approval_step_read_routes, create_approval_step_template_routes,
-    create_delegation_routes,
 };
 
 #[derive(Debug, Serialize)]
@@ -187,16 +187,86 @@ async fn get_request(
     }
 }
 
-/// The guarded approvals surface. `file` is deliberately NOT here — consumers file through
-/// their own seam adapters (their verbs own the resource link); this surface is for
-/// approvers and operators.
-pub fn create_guarded_approvals_routes(m: &ApprovalsModule) -> Router {
-    let engine = Router::new()
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateDelegationBody {
+    delegate_to: Uuid,
+    valid_from: chrono::NaiveDate,
+    valid_to: chrono::NaiveDate,
+    reason: Option<String>,
+}
+
+/// Self-service delegation: the delegating approver is ALWAYS the token's `sub` —
+/// a body `approverId`, if a client sends one, is ignored (unknown fields never
+/// reach this handler). Delegation is consent; the principal cannot be forged.
+async fn create_delegation(
+    State(svc): State<Arc<ApprovalsWriteService>>,
+    tenant: CompanyContext,
+    Json(body): Json<CreateDelegationBody>,
+) -> axum::response::Response {
+    let Some(approver) = actor(&tenant) else {
+        return err_response(ApprovalsError::NotDelegationApprover);
+    };
+    match svc
+        .create_delegation(
+            tenant.company_id,
+            approver,
+            body.delegate_to,
+            body.valid_from,
+            body.valid_to,
+            body.reason.as_deref(),
+        )
+        .await
+    {
+        Ok(id) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({"id": id, "status": "active"})),
+        )
+            .into_response(),
+        Err(e) => err_response(e),
+    }
+}
+
+async fn revoke_delegation(
+    State(svc): State<Arc<ApprovalsWriteService>>,
+    Path(delegation_id): Path<Uuid>,
+    tenant: CompanyContext,
+) -> axum::response::Response {
+    let Some(approver) = actor(&tenant) else {
+        return err_response(ApprovalsError::NotDelegationApprover);
+    };
+    match svc
+        .revoke_delegation(tenant.company_id, delegation_id, approver)
+        .await
+    {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"status": "revoked"})),
+        )
+            .into_response(),
+        Err(e) => err_response(e),
+    }
+}
+
+/// The engine verbs every mounting exposes: request read, decide, withdraw, and the
+/// self-service delegation lifecycle. Factored so the module-held and host-supplied
+/// composers cannot drift.
+fn engine_verbs(svc: Arc<ApprovalsWriteService>) -> Router {
+    Router::new()
         .route("/approvals/requests/:id", axum::routing::get(get_request))
         .route("/approvals/requests/:id/decide", post(decide))
         .route("/approvals/requests/:id/withdraw", post(withdraw))
-        .with_state(m.approvals_write_service.clone());
+        .route("/approvals/delegations", post(create_delegation))
+        .route("/approvals/delegations/:id/revoke", post(revoke_delegation))
+        .with_state(svc)
+}
 
+/// The guarded approvals surface. `file` is deliberately NOT here — consumers file through
+/// their own seam adapters (their verbs own the resource link); this surface is for
+/// approvers and operators. Delegation rows are written ONLY by the self-service verbs
+/// (the generic delegation CRUD stays unmounted: consent cannot be authored on
+/// someone else's behalf).
+pub fn create_guarded_approvals_routes(m: &ApprovalsModule) -> Router {
     Router::new()
         // Operator master data: full generated CRUD (authorization is a host duty).
         .merge(create_approval_policy_routes(
@@ -205,7 +275,6 @@ pub fn create_guarded_approvals_routes(m: &ApprovalsModule) -> Router {
         .merge(create_approval_step_template_routes(
             m.approval_step_template_service.clone(),
         ))
-        .merge(create_delegation_routes(m.delegation_service.clone()))
         // Engine rows: reads only, plus the verbs above.
         .merge(create_approval_request_read_routes(
             m.approval_request_service.clone(),
@@ -213,15 +282,11 @@ pub fn create_guarded_approvals_routes(m: &ApprovalsModule) -> Router {
         .merge(create_approval_step_read_routes(
             m.approval_step_service.clone(),
         ))
-        .merge(engine)
+        .merge(engine_verbs(m.approvals_write_service.clone()))
 }
 
 /// Convenience for hosts that build their own engine (e.g. with a resolver): the same
 /// surface over a supplied service instead of the module-held one.
 pub fn create_guarded_approvals_routes_with(svc: Arc<ApprovalsWriteService>) -> Router {
-    Router::new()
-        .route("/approvals/requests/:id", axum::routing::get(get_request))
-        .route("/approvals/requests/:id/decide", post(decide))
-        .route("/approvals/requests/:id/withdraw", post(withdraw))
-        .with_state(svc)
+    engine_verbs(svc)
 }

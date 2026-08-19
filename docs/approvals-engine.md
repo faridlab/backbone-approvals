@@ -13,6 +13,8 @@ engine owns every state change after that.
 | `status` | Read the live verdict for a resource. |
 | `decide` | Approve/reject one step as an authorized actor. |
 | `withdraw` | Requester-only cancellation; frees the resource for a re-file. |
+| `delegate` | Self-service: an approver grants a delegate their authority for a window. |
+| `revoke` | Self-service: the delegating approver ends that window. |
 
 ## Filing semantics
 
@@ -100,6 +102,28 @@ Requester-only. Marks the request `withdrawn` AND stamps `deleted_at` in
 `metadata` — the soft-delete is what frees the per-resource partial unique, so
 the consumer's re-submit files a fresh chain.
 
+## Delegation is self-service
+
+Delegation rows carry real authority (a live window lets the delegate decide the
+approver's steps), so the guarded surface exposes them ONLY as principal-verbs:
+`POST /approvals/delegations` and `POST /approvals/delegations/:id/revoke`.
+The delegating approver is always the token's `sub` — a body `approverId` is
+ignored, which makes consent structural: nobody can author a window on another
+approver's behalf. The generic delegation CRUD stays unmounted from the guarded
+composer for the same reason.
+
+- **Create** refuses self-delegation (`422 self_delegation_refused`) and an
+  inverted window (`422 delegation_window_invalid`); the row inserts `active`
+  with `source: self_service` in its audit metadata.
+- **Revoke** is approver-only (`403 not_delegation_approver`), row-truth on the
+  still-active predicate: a concurrent or repeated revoke is a typed
+  `409 delegation_not_active`, never a silent second success.
+- **Revoke does not re-route materialized rows.** Delegation resolves ONCE at
+  file time (it reassigns then-materialized steps and stamps `delegated_from`);
+  revoking later stops decide-time authorization and future filings but leaves
+  rows a filing already resolved in place. A revocation that must pull back an
+  in-flight chain is a withdraw-and-refile, not a delegation edit.
+
 ## What this module does NOT ship
 
 - **No background sweeper.** A consumer row that stops pointing at its request
@@ -115,9 +139,9 @@ the consumer's re-submit files a fresh chain.
 
 ## Composition duties (host-owned)
 
-- **Policy-admin RBAC.** The guarded surface exposes policy / step-template /
-  delegation CRUD authenticated only by tenant. WHO may define chains is the
-  composing app's decision (typically an operator role). Until the host has a
+- **Policy-admin RBAC.** The guarded surface exposes policy / step-template
+  CRUD authenticated only by tenant. WHO may define chains is the composing
+  app's decision (typically an operator role). Until the host has a
   role-checking middleware, mount the CRUD routers NOT AT ALL (seed operator
   master data in the database) — the rows are the authorization data the engine
   trusts at decide time, and any employee able to write them can name themselves

@@ -143,6 +143,14 @@ pub enum ApprovalsError {
     NotStepApprover,
     #[error("only the requester may withdraw")]
     NotRequester,
+    #[error("an approver cannot delegate to themselves")]
+    SelfDelegationRefused,
+    #[error("the delegation window is invalid (valid_to before valid_from)")]
+    DelegationWindowInvalid,
+    #[error("only the delegating approver may manage this delegation")]
+    NotDelegationApprover,
+    #[error("the delegation is not active")]
+    DelegationNotActive,
     #[error("approver resolution failed: {0}")]
     StepResolutionFailed(String),
     #[error("the template's all_of quorum must be an array of employee ids")]
@@ -166,6 +174,10 @@ impl ApprovalsError {
             Self::NoSuchStep => "no_such_step",
             Self::NotStepApprover => "not_step_approver",
             Self::NotRequester => "not_requester",
+            Self::SelfDelegationRefused => "self_delegation_refused",
+            Self::DelegationWindowInvalid => "delegation_window_invalid",
+            Self::NotDelegationApprover => "not_delegation_approver",
+            Self::DelegationNotActive => "delegation_not_active",
             Self::StepResolutionFailed(_) => "step_resolution_failed",
             Self::InvalidQuorum => "invalid_quorum",
             Self::InvalidChain(_) => "invalid_approval_chain",
@@ -178,12 +190,14 @@ impl ApprovalsError {
     pub fn http_status(&self) -> u16 {
         match self {
             Self::NotFound | Self::NoSuchStep => 404,
-            Self::NotStepApprover | Self::NotRequester => 403,
-            Self::NotPending | Self::OutOfTurn => 409,
+            Self::NotStepApprover | Self::NotRequester | Self::NotDelegationApprover => 403,
+            Self::NotPending | Self::OutOfTurn | Self::DelegationNotActive => 409,
             Self::StepResolutionFailed(_)
             | Self::InvalidQuorum
             | Self::MissingApproverRef
-            | Self::InvalidChain(_) => 422,
+            | Self::InvalidChain(_)
+            | Self::SelfDelegationRefused
+            | Self::DelegationWindowInvalid => 422,
             Self::FilingRaceExhausted => 503,
             Self::Db(_) => 500,
         }
@@ -200,6 +214,7 @@ struct ResolvedMember {
     assigned_to: Uuid,
 }
 
+#[derive(Clone)]
 pub struct ApprovalsWriteService {
     pool: PgPool,
     repo: ApprovalsWriteRepository,
@@ -821,6 +836,75 @@ impl ApprovalsWriteService {
             .unwrap_or(ApprovalStatus::Withdrawn);
         tx.commit().await?;
         Ok(status)
+    }
+
+    /// Self-service delegation: the AUTHENTICATED approver grants a delegate their
+    /// decision authority for a window. Consent is structural — `approver` is a
+    /// principal argument the HTTP layer stamps from the token, never a body field.
+    /// A delegation resolves ONCE at file time (it re-assigns then-materialized
+    /// steps); revoking later stops decide-time authorization and future filings
+    /// but does not re-route rows a filing already resolved.
+    pub async fn create_delegation(
+        &self,
+        company: Uuid,
+        approver: Uuid,
+        delegate_to: Uuid,
+        valid_from: chrono::NaiveDate,
+        valid_to: chrono::NaiveDate,
+        reason: Option<&str>,
+    ) -> Result<Uuid, ApprovalsError> {
+        if approver == delegate_to {
+            return Err(ApprovalsError::SelfDelegationRefused);
+        }
+        if valid_to < valid_from {
+            return Err(ApprovalsError::DelegationWindowInvalid);
+        }
+        let id = Uuid::new_v4();
+        let mut tx = self.pool.begin().await?;
+        company_scope::bind_company_on(&mut tx, company).await?;
+        self.repo
+            .insert_delegation(
+                &mut tx,
+                company,
+                id,
+                approver,
+                delegate_to,
+                valid_from,
+                valid_to,
+                reason,
+            )
+            .await?;
+        tx.commit().await?;
+        Ok(id)
+    }
+
+    /// Revoke a delegation. Only the delegating approver may; the row-truth UPDATE
+    /// (still-active predicate + RETURNING) makes a concurrent or repeated revoke a
+    /// typed 409 instead of a silent second success. A revoked window stops
+    /// authorizing decide-time delegation checks immediately.
+    pub async fn revoke_delegation(
+        &self,
+        company: Uuid,
+        delegation_id: Uuid,
+        approver: Uuid,
+    ) -> Result<(), ApprovalsError> {
+        let now = Utc::now();
+        let mut tx = self.pool.begin().await?;
+        company_scope::bind_company_on(&mut tx, company).await?;
+        let delegation = self
+            .repo
+            .get_delegation(&mut tx, company, delegation_id)
+            .await?
+            .ok_or(ApprovalsError::NotFound)?;
+        if delegation.approver_id != approver {
+            return Err(ApprovalsError::NotDelegationApprover);
+        }
+        self.repo
+            .revoke_delegation(&mut tx, company, delegation_id, approver, now)
+            .await?
+            .ok_or(ApprovalsError::DelegationNotActive)?;
+        tx.commit().await?;
+        Ok(())
     }
 }
 
