@@ -31,9 +31,9 @@ models:
         attributes: ["@required", "@length(max=120)"]
         description: "Human label for this policy"
 
-      is_active:
-        type: boolean
-        attributes: ["@default(true)"]
+      status:
+        type: ApprovalPolicyStatus
+        attributes: ["@default(active)"]
         description: "Only active policies are matched for new requests"
 
       description:
@@ -56,6 +56,15 @@ models:
         where: "deleted_at IS NULL"
 
 enums:
+  - name: ApprovalPolicyStatus
+    description: "Lifecycle of an approval policy"
+    variants:
+      - name: active
+        description: "Eligible for matching new requests"
+        default: true
+      - name: inactive
+        description: "Retired; existing requests keep running to verdict"
+
   - name: ApprovalResourceType
     description: "The workflow entity kind an approval gates."
     variants:

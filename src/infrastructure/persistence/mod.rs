@@ -26,8 +26,9 @@ pub use delegation_repository::DelegationRepository;
 
 // Re-export backbone-orm types
 pub use backbone_orm::repository::{
-    DatabaseOperations, FilterCondition, FilterParams, PaginatedResult, PaginationInfo,
-    PaginationParams, PostgresRepository, SortDirection, SortParams,
+    DatabaseOperations, PostgresRepository,
+    PaginationParams, PaginationInfo, PaginatedResult,
+    FilterParams, FilterCondition, SortParams, SortDirection,
 };
 
 // Re-export custom persistence types

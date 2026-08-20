@@ -1,10 +1,10 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc, NaiveDate};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use super::AuditMetadata;
 use super::DelegationStatus;
+use super::AuditMetadata;
 
 /// Strongly-typed ID for Delegation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -12,15 +12,9 @@ use super::DelegationStatus;
 pub struct DelegationId(pub Uuid);
 
 impl DelegationId {
-    pub fn new(id: Uuid) -> Self {
-        Self(id)
-    }
-    pub fn generate() -> Self {
-        Self(Uuid::new_v4())
-    }
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
+    pub fn new(id: Uuid) -> Self { Self(id) }
+    pub fn generate() -> Self { Self(Uuid::new_v4()) }
+    pub fn into_inner(self) -> Uuid { self.0 }
 }
 
 impl std::fmt::Display for DelegationId {
@@ -37,28 +31,20 @@ impl std::str::FromStr for DelegationId {
 }
 
 impl From<Uuid> for DelegationId {
-    fn from(id: Uuid) -> Self {
-        Self(id)
-    }
+    fn from(id: Uuid) -> Self { Self(id) }
 }
 
 impl From<DelegationId> for Uuid {
-    fn from(id: DelegationId) -> Self {
-        id.0
-    }
+    fn from(id: DelegationId) -> Self { id.0 }
 }
 
 impl AsRef<Uuid> for DelegationId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
+    fn as_ref(&self) -> &Uuid { &self.0 }
 }
 
 impl std::ops::Deref for DelegationId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -83,14 +69,7 @@ impl Delegation {
     }
 
     /// Create a new Delegation with required fields
-    pub fn new(
-        company_id: Uuid,
-        approver_id: Uuid,
-        delegate_to_id: Uuid,
-        valid_from: NaiveDate,
-        valid_to: NaiveDate,
-        status: DelegationStatus,
-    ) -> Self {
+    pub fn new(company_id: Uuid, approver_id: Uuid, delegate_to_id: Uuid, valid_from: NaiveDate, valid_to: NaiveDate, status: DelegationStatus) -> Self {
         Self {
             id: Uuid::new_v4(),
             company_id,
@@ -159,6 +138,7 @@ impl Delegation {
         &self.status
     }
 
+
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
@@ -178,39 +158,25 @@ impl Delegation {
         for (key, value) in fields {
             match key.as_str() {
                 "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.company_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
                 }
                 "approver_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.approver_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.approver_id = v; }
                 }
                 "delegate_to_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.delegate_to_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.delegate_to_id = v; }
                 }
                 "valid_from" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.valid_from = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.valid_from = v; }
                 }
                 "valid_to" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.valid_to = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.valid_to = v; }
                 }
                 "reason" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.reason = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.reason = v; }
                 }
                 "status" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.status = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.status = v; }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -342,21 +308,11 @@ impl DelegationBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<Delegation, String> {
-        let company_id = self
-            .company_id
-            .ok_or_else(|| "company_id is required".to_string())?;
-        let approver_id = self
-            .approver_id
-            .ok_or_else(|| "approver_id is required".to_string())?;
-        let delegate_to_id = self
-            .delegate_to_id
-            .ok_or_else(|| "delegate_to_id is required".to_string())?;
-        let valid_from = self
-            .valid_from
-            .ok_or_else(|| "valid_from is required".to_string())?;
-        let valid_to = self
-            .valid_to
-            .ok_or_else(|| "valid_to is required".to_string())?;
+        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
+        let approver_id = self.approver_id.ok_or_else(|| "approver_id is required".to_string())?;
+        let delegate_to_id = self.delegate_to_id.ok_or_else(|| "delegate_to_id is required".to_string())?;
+        let valid_from = self.valid_from.ok_or_else(|| "valid_from is required".to_string())?;
+        let valid_to = self.valid_to.ok_or_else(|| "valid_to is required".to_string())?;
 
         Ok(Delegation {
             id: Uuid::new_v4(),

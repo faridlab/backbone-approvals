@@ -5,13 +5,11 @@
 //! This trait defines the repository contract for the ApprovalRequest aggregate.
 //! Implementation is in the infrastructure layer.
 
-use anyhow::Result;
 use async_trait::async_trait;
+use anyhow::Result;
 use uuid::Uuid;
 
-use crate::domain::entity::{
-    ApprovalPriority, ApprovalRequest, ApprovalResourceType, ApprovalStatus,
-};
+use crate::domain::entity::{ApprovalRequest, ApprovalPriority, ApprovalResourceType, ApprovalStatus};
 
 /// Pagination parameters for list queries
 #[derive(Debug, Clone, Default)]
@@ -59,14 +57,7 @@ pub struct ApprovalRequestFilter {
 impl ApprovalRequestFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some()
-            || self.resource_type.is_some()
-            || self.resource_id.is_some()
-            || self.policy_id.is_some()
-            || self.requested_by.is_some()
-            || self.status.is_some()
-            || self.priority.is_some()
-            || self.decided_by.is_some()
+        self.company_id.is_some() || self.resource_type.is_some() || self.resource_id.is_some() || self.policy_id.is_some() || self.requested_by.is_some() || self.status.is_some() || self.priority.is_some() || self.decided_by.is_some()
     }
 }
 
@@ -76,6 +67,7 @@ impl ApprovalRequestFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait ApprovalRequestRepository: Send + Sync {
+
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -100,17 +92,10 @@ pub trait ApprovalRequestRepository: Send + Sync {
     // =========================================================================
 
     /// List approval_request with pagination
-    async fn list(
-        &self,
-        params: ApprovalRequestPaginationParams,
-    ) -> Result<ApprovalRequestPaginatedResult>;
+    async fn list(&self, params: ApprovalRequestPaginationParams) -> Result<ApprovalRequestPaginatedResult>;
 
     /// List approval_request with pagination and filters
-    async fn list_with_filters(
-        &self,
-        params: ApprovalRequestPaginationParams,
-        filters: ApprovalRequestFilter,
-    ) -> Result<ApprovalRequestPaginatedResult>;
+    async fn list_with_filters(&self, params: ApprovalRequestPaginationParams, filters: ApprovalRequestFilter) -> Result<ApprovalRequestPaginatedResult>;
 
     /// Count all approval_request entities
     async fn count(&self) -> Result<u64>;
@@ -132,10 +117,7 @@ pub trait ApprovalRequestRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<ApprovalRequest>>;
 
     /// List soft-deleted approval_request entities
-    async fn list_deleted(
-        &self,
-        params: ApprovalRequestPaginationParams,
-    ) -> Result<ApprovalRequestPaginatedResult>;
+    async fn list_deleted(&self, params: ApprovalRequestPaginationParams) -> Result<ApprovalRequestPaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

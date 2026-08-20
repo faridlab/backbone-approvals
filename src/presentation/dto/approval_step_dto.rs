@@ -5,9 +5,9 @@
 //! DTOs provide a clean separation between domain entities and API
 //! representations, with validation and OpenAPI documentation support.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use chrono::{DateTime, Utc};
 
 #[cfg(feature = "openapi")]
 #[cfg(feature = "openapi")]
@@ -17,9 +17,9 @@ use utoipa::ToSchema;
 use validator::Validate;
 
 use crate::domain::entity::ApprovalStep;
+use crate::domain::entity::AuditMetadata;
 use crate::domain::entity::ApprovalStepStatus;
 use crate::domain::entity::ApproverKind;
-use crate::domain::entity::AuditMetadata;
 
 // =============================================================================
 // Create DTO
@@ -34,16 +34,10 @@ use crate::domain::entity::AuditMetadata;
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateApprovalStepDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "company_id")]
     pub company_id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "request_id")]
     pub request_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -51,23 +45,12 @@ pub struct CreateApprovalStepDto {
     pub step_no: i32,
     #[serde(alias = "approver_kind")]
     pub approver_kind: ApproverKind,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "approver_ref"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "approver_ref")]
     pub approver_ref: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "assigned_to")]
     pub assigned_to: Uuid,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "delegated_from"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "delegated_from")]
     pub delegated_from: Option<Uuid>,
     pub status: ApprovalStepStatus,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "acted_at")]
@@ -91,16 +74,10 @@ pub struct CreateApprovalStepDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateApprovalStepDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "company_id")]
     pub company_id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "request_id")]
     pub request_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -108,23 +85,12 @@ pub struct UpdateApprovalStepDto {
     pub step_no: i32,
     #[serde(alias = "approver_kind")]
     pub approver_kind: ApproverKind,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "approver_ref"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "approver_ref")]
     pub approver_ref: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "assigned_to")]
     pub assigned_to: Uuid,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "delegated_from"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "delegated_from")]
     pub delegated_from: Option<Uuid>,
     pub status: ApprovalStepStatus,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "acted_at")]
@@ -148,16 +114,10 @@ pub struct UpdateApprovalStepDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct PatchApprovalStepDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
     pub company_id: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "request_id")]
     pub request_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -167,10 +127,7 @@ pub struct PatchApprovalStepDto {
     pub approver_kind: Option<ApproverKind>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "approver_ref")]
     pub approver_ref: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "assigned_to")]
     pub assigned_to: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "delegated_from")]
@@ -188,17 +145,7 @@ pub struct PatchApprovalStepDto {
 impl PatchApprovalStepDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some()
-            || self.request_id.is_some()
-            || self.step_no.is_some()
-            || self.approver_kind.is_some()
-            || self.approver_ref.is_some()
-            || self.assigned_to.is_some()
-            || self.delegated_from.is_some()
-            || self.status.is_some()
-            || self.acted_at.is_some()
-            || self.comment.is_some()
-            || self.sla_due_at.is_some()
+        self.company_id.is_some() || self.request_id.is_some() || self.step_no.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.assigned_to.is_some() || self.delegated_from.is_some() || self.status.is_some() || self.acted_at.is_some() || self.comment.is_some() || self.sla_due_at.is_some()
     }
 }
 
@@ -214,29 +161,17 @@ impl PatchApprovalStepDto {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalStepResponseDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub company_id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub request_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     pub step_no: i32,
     pub approver_kind: ApproverKind,
     pub approver_ref: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub assigned_to: Uuid,
     pub delegated_from: Option<Uuid>,
     pub status: ApprovalStepStatus,

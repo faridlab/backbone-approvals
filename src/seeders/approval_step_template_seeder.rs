@@ -41,10 +41,9 @@ impl Seeder for SeedApprovalStepTemplateSeeder {
 
     async fn should_run(&self, pool: &PgPool) -> Result<bool> {
         // Check if approvals.approval_step_templates table has any data
-        let count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM approvals.approval_step_templates")
-                .fetch_one(pool)
-                .await?;
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM approvals.approval_step_templates")
+            .fetch_one(pool)
+            .await?;
         Ok(count.0 == 0)
     }
 

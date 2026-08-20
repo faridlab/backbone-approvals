@@ -5,9 +5,9 @@
 //! DTOs provide a clean separation between domain entities and API
 //! representations, with validation and OpenAPI documentation support.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use chrono::{DateTime, Utc};
 
 #[cfg(feature = "openapi")]
 #[cfg(feature = "openapi")]
@@ -17,8 +17,9 @@ use utoipa::ToSchema;
 use validator::Validate;
 
 use crate::domain::entity::ApprovalPolicy;
-use crate::domain::entity::ApprovalResourceType;
 use crate::domain::entity::AuditMetadata;
+use crate::domain::entity::ApprovalPolicyStatus;
+use crate::domain::entity::ApprovalResourceType;
 
 // =============================================================================
 // Create DTO
@@ -33,19 +34,14 @@ use crate::domain::entity::AuditMetadata;
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateApprovalPolicyDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "company_id")]
     pub company_id: Uuid,
     #[serde(alias = "resource_type")]
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub name: String,
-    #[cfg_attr(feature = "openapi", schema(example = true))]
-    #[serde(alias = "is_active")]
-    pub is_active: bool,
+    pub status: ApprovalPolicyStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
@@ -63,19 +59,14 @@ pub struct CreateApprovalPolicyDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateApprovalPolicyDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "company_id")]
     pub company_id: Uuid,
     #[serde(alias = "resource_type")]
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub name: String,
-    #[cfg_attr(feature = "openapi", schema(example = true))]
-    #[serde(alias = "is_active")]
-    pub is_active: bool,
+    pub status: ApprovalPolicyStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
@@ -93,10 +84,7 @@ pub struct UpdateApprovalPolicyDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct PatchApprovalPolicyDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
     pub company_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "resource_type")]
@@ -104,9 +92,8 @@ pub struct PatchApprovalPolicyDto {
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[cfg_attr(feature = "openapi", schema(example = true))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "is_active")]
-    pub is_active: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<ApprovalPolicyStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
@@ -114,11 +101,7 @@ pub struct PatchApprovalPolicyDto {
 impl PatchApprovalPolicyDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some()
-            || self.resource_type.is_some()
-            || self.name.is_some()
-            || self.is_active.is_some()
-            || self.description.is_some()
+        self.company_id.is_some() || self.resource_type.is_some() || self.name.is_some() || self.status.is_some() || self.description.is_some()
     }
 }
 
@@ -134,21 +117,14 @@ impl PatchApprovalPolicyDto {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPolicyResponseDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub name: String,
-    #[cfg_attr(feature = "openapi", schema(example = true))]
-    pub is_active: bool,
+    pub status: ApprovalPolicyStatus,
     pub description: Option<String>,
     pub metadata: AuditMetadata,
 }
@@ -183,12 +159,7 @@ pub struct ApprovalPolicyListResponseDto {
 
 impl ApprovalPolicyListResponseDto {
     /// Create a new list response from items and pagination info
-    pub fn new(
-        items: Vec<ApprovalPolicyResponseDto>,
-        total: u64,
-        page: u32,
-        per_page: u32,
-    ) -> Self {
+    pub fn new(items: Vec<ApprovalPolicyResponseDto>, total: u64, page: u32, per_page: u32) -> Self {
         let total_pages = if per_page > 0 {
             ((total as f64) / (per_page as f64)).ceil() as u32
         } else {
@@ -229,7 +200,7 @@ impl From<ApprovalPolicy> for ApprovalPolicyResponseDto {
             company_id: entity.company_id,
             resource_type: entity.resource_type,
             name: entity.name,
-            is_active: entity.is_active,
+            status: entity.status,
             description: entity.description,
             metadata: entity.metadata,
         }
@@ -256,7 +227,7 @@ impl From<CreateApprovalPolicyDto> for ApprovalPolicy {
             company_id: dto.company_id,
             resource_type: dto.resource_type,
             name: dto.name,
-            is_active: dto.is_active,
+            status: dto.status,
             description: dto.description,
             metadata: AuditMetadata::default(),
         }
@@ -270,7 +241,7 @@ impl From<&ApprovalPolicy> for ApprovalPolicyResponseDto {
             company_id: entity.company_id.clone(),
             resource_type: entity.resource_type.clone(),
             name: entity.name.clone(),
-            is_active: entity.is_active.clone(),
+            status: entity.status.clone(),
             description: entity.description.clone(),
             metadata: entity.metadata.clone(),
         }
@@ -288,7 +259,7 @@ impl backbone_core::ApplyUpdateDto<UpdateApprovalPolicyDto> for ApprovalPolicy {
         self.company_id = dto.company_id;
         self.resource_type = dto.resource_type;
         self.name = dto.name;
-        self.is_active = dto.is_active;
+        self.status = dto.status;
         self.description = dto.description;
         Ok(self)
     }

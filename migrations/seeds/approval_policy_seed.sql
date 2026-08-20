@@ -9,7 +9,7 @@
 --     company_id,
 --     resource_type,
 --     name,
---     is_active,
+--     status,
 --     description,
 --     metadata
 -- ) VALUES
@@ -20,7 +20,7 @@
 -- Example: Insert reference data
 -- Uncomment and modify the following:
 
--- INSERT INTO approvals.approval_policies (id, code, name, is_active, created_at, updated_at) VALUES
+-- INSERT INTO approvals.approval_policies (id, code, name, status, created_at, updated_at) VALUES
 --     (gen_random_uuid(), 'SAMPLE1', 'Sample 1', true, NOW(), NOW()),
 --     (gen_random_uuid(), 'SAMPLE2', 'Sample 2', true, NOW(), NOW());
 

@@ -76,7 +76,7 @@ impl ApprovalsWriteRepository {
     ) -> Result<Option<ApprovalPolicy>, sqlx::Error> {
         sqlx::query_as::<_, ApprovalPolicy>(
             r#"SELECT * FROM approvals.approval_policies
-                WHERE company_id = $1 AND resource_type = $2 AND is_active
+                WHERE company_id = $1 AND resource_type = $2 AND status = 'active'
                   AND (metadata->>'deleted_at') IS NULL
                 ORDER BY (metadata->>'created_at') NULLS LAST, id
                 LIMIT 1"#,

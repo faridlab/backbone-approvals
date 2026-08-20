@@ -27,7 +27,7 @@ impl TestDataGenerator for ApprovalPolicyTestData {
             "company_id": Uuid::new_v4().to_string(),
             "resource_type": "promotion",
             "name": format!("Test {}", Uuid::new_v4().to_string().split('-').next().unwrap()),
-            "is_active": false,
+            "status": "active",
             "description": null,
             "metadata": json!({}),
         })
@@ -40,7 +40,7 @@ impl TestDataGenerator for ApprovalPolicyTestData {
             "company_id": Uuid::new_v4().to_string(),
             "resource_type": "promotion",
             "name": format!("Test {}", Uuid::new_v4().to_string().split('-').next().unwrap()),
-            "is_active": false,
+            "status": "active",
             "description": null,
             "metadata": json!({}),
         })

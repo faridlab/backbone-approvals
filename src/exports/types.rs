@@ -5,10 +5,10 @@
 //! These DTOs are the ONLY types other modules should use.
 //! They are decoupled from internal domain entities.
 
-use crate::domain::entity::*;
-use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use chrono::{DateTime, Utc, NaiveDate};
+use crate::domain::entity::*;
 
 // ============================================================================
 // APPROVALPOLICY TYPES
@@ -51,7 +51,7 @@ pub struct ApprovalPolicyDto {
     pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     pub name: String,
-    pub is_active: bool,
+    pub status: ApprovalPolicyStatus,
     pub description: Option<String>,
     pub metadata: serde_json::Value,
 }
@@ -61,6 +61,7 @@ pub struct ApprovalPolicyDto {
 pub struct ApprovalPolicySummary {
     pub id: ApprovalPolicyId,
     pub name: String,
+    pub status: ApprovalPolicyStatus,
 }
 
 /// Reference to ApprovalPolicy for foreign key relationships

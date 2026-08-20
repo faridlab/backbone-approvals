@@ -1862,7 +1862,7 @@ components:
         - company_id
         - resource_type
         - name
-        - is_active
+        - status
         - metadata
       properties:
         id:
@@ -1875,8 +1875,8 @@ components:
           type: string
         name:
           type: string
-        is_active:
-          type: boolean
+        status:
+          type: string
         description:
           nullable: true
           type: string
@@ -1902,7 +1902,7 @@ components:
         - company_id
         - resource_type
         - name
-        - is_active
+        - status
         - metadata
       properties:
         company_id:
@@ -1912,8 +1912,8 @@ components:
           type: string
         name:
           type: string
-        is_active:
-          type: boolean
+        status:
+          type: string
         description:
           nullable: true
           type: string
@@ -1926,7 +1926,7 @@ components:
         - company_id
         - resource_type
         - name
-        - is_active
+        - status
         - metadata
       properties:
         company_id:
@@ -1936,8 +1936,8 @@ components:
           type: string
         name:
           type: string
-        is_active:
-          type: boolean
+        status:
+          type: string
         description:
           nullable: true
           type: string
@@ -1954,8 +1954,8 @@ components:
           type: string
         name:
           type: string
-        is_active:
-          type: boolean
+        status:
+          type: string
         description:
           nullable: true
           type: string

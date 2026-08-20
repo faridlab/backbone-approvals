@@ -5,18 +5,17 @@
 //! Returns an `EntityValidator<Delegation>` pre-loaded with schema-derived
 //! field rules. Extend in the `// <<< CUSTOM` zone.
 
+use backbone_core::{EntityValidator, ValidationErrors, ValidationError};
+use backbone_core::{OptionalNotBlank};
 use crate::domain::entity::Delegation;
-use backbone_core::OptionalNotBlank;
-use backbone_core::{EntityValidator, ValidationError, ValidationErrors};
 
 /// Validator type alias for Delegation entities.
 pub type DelegationValidator = EntityValidator<Delegation>;
 
 /// Build a validator for Delegation with all schema-defined field rules.
 pub fn delegation_validator() -> DelegationValidator {
-    EntityValidator::new().rule(OptionalNotBlank::new("reason", |e: &Delegation| {
-        e.reason.as_deref()
-    }))
+    EntityValidator::new()
+        .rule(OptionalNotBlank::new("reason", |e: &Delegation| e.reason.as_deref()))
     // <<< CUSTOM RULES
     // END CUSTOM RULES
 }

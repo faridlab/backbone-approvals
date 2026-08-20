@@ -23,9 +23,7 @@ pub struct DelegationRepository(
 
 impl std::ops::Deref for DelegationRepository {
     type Target = backbone_orm::GenericCrudRepository<Delegation, backbone_orm::SoftDelete>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl DelegationRepository {

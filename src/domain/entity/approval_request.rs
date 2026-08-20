@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use super::ApprovalPriority;
 use super::ApprovalResourceType;
 use super::ApprovalStatus;
+use super::ApprovalPriority;
 use super::AuditMetadata;
 
 /// Strongly-typed ID for ApprovalRequest
@@ -14,15 +14,9 @@ use super::AuditMetadata;
 pub struct ApprovalRequestId(pub Uuid);
 
 impl ApprovalRequestId {
-    pub fn new(id: Uuid) -> Self {
-        Self(id)
-    }
-    pub fn generate() -> Self {
-        Self(Uuid::new_v4())
-    }
-    pub fn into_inner(self) -> Uuid {
-        self.0
-    }
+    pub fn new(id: Uuid) -> Self { Self(id) }
+    pub fn generate() -> Self { Self(Uuid::new_v4()) }
+    pub fn into_inner(self) -> Uuid { self.0 }
 }
 
 impl std::fmt::Display for ApprovalRequestId {
@@ -39,28 +33,20 @@ impl std::str::FromStr for ApprovalRequestId {
 }
 
 impl From<Uuid> for ApprovalRequestId {
-    fn from(id: Uuid) -> Self {
-        Self(id)
-    }
+    fn from(id: Uuid) -> Self { Self(id) }
 }
 
 impl From<ApprovalRequestId> for Uuid {
-    fn from(id: ApprovalRequestId) -> Self {
-        id.0
-    }
+    fn from(id: ApprovalRequestId) -> Self { id.0 }
 }
 
 impl AsRef<Uuid> for ApprovalRequestId {
-    fn as_ref(&self) -> &Uuid {
-        &self.0
-    }
+    fn as_ref(&self) -> &Uuid { &self.0 }
 }
 
 impl std::ops::Deref for ApprovalRequestId {
     type Target = Uuid;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -90,14 +76,7 @@ impl ApprovalRequest {
     }
 
     /// Create a new ApprovalRequest with required fields
-    pub fn new(
-        company_id: Uuid,
-        resource_type: ApprovalResourceType,
-        resource_id: Uuid,
-        requested_by: Uuid,
-        status: ApprovalStatus,
-        priority: ApprovalPriority,
-    ) -> Self {
+    pub fn new(company_id: Uuid, resource_type: ApprovalResourceType, resource_id: Uuid, requested_by: Uuid, status: ApprovalStatus, priority: ApprovalPriority) -> Self {
         Self {
             id: Uuid::new_v4(),
             company_id,
@@ -171,6 +150,7 @@ impl ApprovalRequest {
         &self.status
     }
 
+
     // ==========================================================
     // Fluent Setters (with_* for optional fields)
     // ==========================================================
@@ -220,64 +200,40 @@ impl ApprovalRequest {
         for (key, value) in fields {
             match key.as_str() {
                 "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.company_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
                 }
                 "resource_type" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.resource_type = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.resource_type = v; }
                 }
                 "resource_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.resource_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.resource_id = v; }
                 }
                 "policy_id" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.policy_id = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.policy_id = v; }
                 }
                 "requested_by" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.requested_by = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.requested_by = v; }
                 }
                 "status" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.status = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.status = v; }
                 }
                 "current_step" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.current_step = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.current_step = v; }
                 }
                 "priority" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.priority = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.priority = v; }
                 }
                 "submitted_at" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.submitted_at = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.submitted_at = v; }
                 }
                 "decided_at" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.decided_at = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.decided_at = v; }
                 }
                 "decided_by" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.decided_by = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.decided_by = v; }
                 }
                 "summary" => {
-                    if let Ok(v) = serde_json::from_value(value) {
-                        self.summary = v;
-                    }
+                    if let Ok(v) = serde_json::from_value(value) { self.summary = v; }
                 }
                 _ => {} // ignore unknown fields
             }
@@ -336,10 +292,7 @@ impl backbone_orm::EntityRepoMeta for ApprovalRequest {
         m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("resource_id".to_string(), "uuid".to_string());
         m.insert("policy_id".to_string(), "uuid".to_string());
-        m.insert(
-            "resource_type".to_string(),
-            "approval_resource_type".to_string(),
-        );
+        m.insert("resource_type".to_string(), "approval_resource_type".to_string());
         m.insert("status".to_string(), "approval_status".to_string());
         m.insert("priority".to_string(), "approval_priority".to_string());
         m
@@ -449,18 +402,10 @@ impl ApprovalRequestBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<ApprovalRequest, String> {
-        let company_id = self
-            .company_id
-            .ok_or_else(|| "company_id is required".to_string())?;
-        let resource_type = self
-            .resource_type
-            .ok_or_else(|| "resource_type is required".to_string())?;
-        let resource_id = self
-            .resource_id
-            .ok_or_else(|| "resource_id is required".to_string())?;
-        let requested_by = self
-            .requested_by
-            .ok_or_else(|| "requested_by is required".to_string())?;
+        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
+        let resource_type = self.resource_type.ok_or_else(|| "resource_type is required".to_string())?;
+        let resource_id = self.resource_id.ok_or_else(|| "resource_id is required".to_string())?;
+        let requested_by = self.requested_by.ok_or_else(|| "requested_by is required".to_string())?;
 
         Ok(ApprovalRequest {
             id: Uuid::new_v4(),

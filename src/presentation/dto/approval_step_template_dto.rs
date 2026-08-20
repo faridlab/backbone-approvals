@@ -5,9 +5,9 @@
 //! DTOs provide a clean separation between domain entities and API
 //! representations, with validation and OpenAPI documentation support.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use chrono::{DateTime, Utc};
 
 #[cfg(feature = "openapi")]
 #[cfg(feature = "openapi")]
@@ -17,8 +17,8 @@ use utoipa::ToSchema;
 use validator::Validate;
 
 use crate::domain::entity::ApprovalStepTemplate;
-use crate::domain::entity::ApproverKind;
 use crate::domain::entity::AuditMetadata;
+use crate::domain::entity::ApproverKind;
 
 // =============================================================================
 // Create DTO
@@ -33,16 +33,10 @@ use crate::domain::entity::AuditMetadata;
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateApprovalStepTemplateDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "company_id")]
     pub company_id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "policy_id")]
     pub policy_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -50,11 +44,7 @@ pub struct CreateApprovalStepTemplateDto {
     pub step_no: i32,
     #[serde(alias = "approver_kind")]
     pub approver_kind: ApproverKind,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "approver_ref"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "approver_ref")]
     pub approver_ref: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "sla_hours")]
     pub sla_hours: Option<i32>,
@@ -75,16 +65,10 @@ pub struct CreateApprovalStepTemplateDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateApprovalStepTemplateDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "company_id")]
     pub company_id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "policy_id")]
     pub policy_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -92,11 +76,7 @@ pub struct UpdateApprovalStepTemplateDto {
     pub step_no: i32,
     #[serde(alias = "approver_kind")]
     pub approver_kind: ApproverKind,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "approver_ref"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "approver_ref")]
     pub approver_ref: Option<Uuid>,
     #[serde(default, skip_serializing_if = "Option::is_none", alias = "sla_hours")]
     pub sla_hours: Option<i32>,
@@ -117,16 +97,10 @@ pub struct UpdateApprovalStepTemplateDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct PatchApprovalStepTemplateDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
     pub company_id: Option<Uuid>,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "policy_id")]
     pub policy_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -145,13 +119,7 @@ pub struct PatchApprovalStepTemplateDto {
 impl PatchApprovalStepTemplateDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some()
-            || self.policy_id.is_some()
-            || self.step_no.is_some()
-            || self.approver_kind.is_some()
-            || self.approver_ref.is_some()
-            || self.sla_hours.is_some()
-            || self.all_of.is_some()
+        self.company_id.is_some() || self.policy_id.is_some() || self.step_no.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.sla_hours.is_some() || self.all_of.is_some()
     }
 }
 
@@ -167,20 +135,11 @@ impl PatchApprovalStepTemplateDto {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalStepTemplateResponseDto {
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub company_id: Uuid,
-    #[cfg_attr(
-        feature = "openapi",
-        schema(example = "550e8400-e29b-41d4-a716-446655440000")
-    )]
+    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub policy_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
     pub step_no: i32,
@@ -221,12 +180,7 @@ pub struct ApprovalStepTemplateListResponseDto {
 
 impl ApprovalStepTemplateListResponseDto {
     /// Create a new list response from items and pagination info
-    pub fn new(
-        items: Vec<ApprovalStepTemplateResponseDto>,
-        total: u64,
-        page: u32,
-        per_page: u32,
-    ) -> Self {
+    pub fn new(items: Vec<ApprovalStepTemplateResponseDto>, total: u64, page: u32, per_page: u32) -> Self {
         let total_pages = if per_page > 0 {
             ((total as f64) / (per_page as f64)).ceil() as u32
         } else {
@@ -328,10 +282,7 @@ impl backbone_core::FromCreateDto<CreateApprovalStepTemplateDto> for ApprovalSte
 }
 
 impl backbone_core::ApplyUpdateDto<UpdateApprovalStepTemplateDto> for ApprovalStepTemplate {
-    fn apply_update(
-        mut self,
-        dto: UpdateApprovalStepTemplateDto,
-    ) -> backbone_core::ServiceResult<Self> {
+    fn apply_update(mut self, dto: UpdateApprovalStepTemplateDto) -> backbone_core::ServiceResult<Self> {
         self.company_id = dto.company_id;
         self.policy_id = dto.policy_id;
         self.step_no = dto.step_no;

@@ -5,8 +5,8 @@
 //! This trait defines the repository contract for the ApprovalStep aggregate.
 //! Implementation is in the infrastructure layer.
 
-use anyhow::Result;
 use async_trait::async_trait;
+use anyhow::Result;
 use uuid::Uuid;
 
 use crate::domain::entity::{ApprovalStep, ApprovalStepStatus, ApproverKind};
@@ -57,14 +57,7 @@ pub struct ApprovalStepFilter {
 impl ApprovalStepFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some()
-            || self.request_id.is_some()
-            || self.approver_kind.is_some()
-            || self.approver_ref.is_some()
-            || self.assigned_to.is_some()
-            || self.delegated_from.is_some()
-            || self.status.is_some()
-            || self.comment.is_some()
+        self.company_id.is_some() || self.request_id.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.assigned_to.is_some() || self.delegated_from.is_some() || self.status.is_some() || self.comment.is_some()
     }
 }
 
@@ -74,6 +67,7 @@ impl ApprovalStepFilter {
 /// Implementations should be in the infrastructure layer.
 #[async_trait]
 pub trait ApprovalStepRepository: Send + Sync {
+
     // =========================================================================
     // Core CRUD Operations
     // =========================================================================
@@ -98,17 +92,10 @@ pub trait ApprovalStepRepository: Send + Sync {
     // =========================================================================
 
     /// List approval_step with pagination
-    async fn list(
-        &self,
-        params: ApprovalStepPaginationParams,
-    ) -> Result<ApprovalStepPaginatedResult>;
+    async fn list(&self, params: ApprovalStepPaginationParams) -> Result<ApprovalStepPaginatedResult>;
 
     /// List approval_step with pagination and filters
-    async fn list_with_filters(
-        &self,
-        params: ApprovalStepPaginationParams,
-        filters: ApprovalStepFilter,
-    ) -> Result<ApprovalStepPaginatedResult>;
+    async fn list_with_filters(&self, params: ApprovalStepPaginationParams, filters: ApprovalStepFilter) -> Result<ApprovalStepPaginatedResult>;
 
     /// Count all approval_step entities
     async fn count(&self) -> Result<u64>;
@@ -130,10 +117,7 @@ pub trait ApprovalStepRepository: Send + Sync {
     async fn restore(&self, id: &str) -> Result<Option<ApprovalStep>>;
 
     /// List soft-deleted approval_step entities
-    async fn list_deleted(
-        &self,
-        params: ApprovalStepPaginationParams,
-    ) -> Result<ApprovalStepPaginatedResult>;
+    async fn list_deleted(&self, params: ApprovalStepPaginationParams) -> Result<ApprovalStepPaginatedResult>;
 
     /// Empty trash (permanently delete all soft-deleted entities)
     async fn empty_trash(&self) -> Result<u64>;

@@ -108,8 +108,8 @@ async fn seed_policy(pool: &PgPool, company: Uuid, resource_type: &str) -> Uuid 
     let id = Uuid::new_v4();
     sqlx::query(
         r#"INSERT INTO approvals.approval_policies
-               (id, company_id, resource_type, name, is_active, description, metadata)
-           VALUES ($1, $2, $3::approval_resource_type, $4, true, NULL, '{}'::jsonb)"#,
+               (id, company_id, resource_type, name, status, description, metadata)
+           VALUES ($1, $2, $3::approval_resource_type, $4, 'active', NULL, '{}'::jsonb)"#,
     )
     .bind(id)
     .bind(company)
@@ -1974,21 +1974,21 @@ async fn second_active_policy_for_a_resource_is_refused() {
     let pool = pool().await;
     let company = Uuid::new_v4();
 
-    let insert = |name: &str, active: bool| {
+    let insert = |name: &str, status: &str| {
         sqlx::query(
             r#"INSERT INTO approvals.approval_policies
-                   (id, company_id, resource_type, name, is_active, description, metadata)
-               VALUES ($1, $2, 'leave', $3, $4, NULL, '{}'::jsonb)"#,
+                   (id, company_id, resource_type, name, status, description, metadata)
+               VALUES ($1, $2, 'leave', $3, $4::approval_policy_status, NULL, '{}'::jsonb)"#,
         )
         .bind(Uuid::new_v4())
         .bind(company)
         .bind(name.to_string())
-        .bind(active)
+        .bind(status.to_string())
     };
-    pool.execute(insert("first policy", true)).await.unwrap();
+    pool.execute(insert("first policy", "active")).await.unwrap();
     // Same name family, distinct names — the (company, resource_type, name) unique is not
     // the constraint under test; the partial unique on ACTIVE rows is.
-    let err = pool.execute(insert("replacement", true)).await.unwrap_err();
+    let err = pool.execute(insert("replacement", "active")).await.unwrap_err();
     let code = err
         .as_database_error()
         .and_then(|d| d.code())
@@ -2000,10 +2000,10 @@ async fn second_active_policy_for_a_resource_is_refused() {
     );
 
     // Deactivating the first frees the slot — the replacement activates cleanly.
-    sqlx::query("UPDATE approvals.approval_policies SET is_active = false WHERE company_id = $1")
+    sqlx::query("UPDATE approvals.approval_policies SET status = 'inactive' WHERE company_id = $1")
         .bind(company)
         .execute(&pool)
         .await
         .unwrap();
-    pool.execute(insert("replacement", true)).await.unwrap();
+    pool.execute(insert("replacement", "active")).await.unwrap();
 }

@@ -22,11 +22,8 @@ pub struct ApprovalStepTemplateRepository(
 );
 
 impl std::ops::Deref for ApprovalStepTemplateRepository {
-    type Target =
-        backbone_orm::GenericCrudRepository<ApprovalStepTemplate, backbone_orm::SoftDelete>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    type Target = backbone_orm::GenericCrudRepository<ApprovalStepTemplate, backbone_orm::SoftDelete>;
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 impl ApprovalStepTemplateRepository {
@@ -36,8 +33,4 @@ impl ApprovalStepTemplateRepository {
     }
 }
 
-backbone_core::impl_crud_repository!(
-    ApprovalStepTemplateRepository,
-    ApprovalStepTemplate,
-    soft_delete
-);
+backbone_core::impl_crud_repository!(ApprovalStepTemplateRepository, ApprovalStepTemplate, soft_delete);

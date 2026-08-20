@@ -7,9 +7,9 @@
 
 use backbone_core::GenericCrudService;
 
+use crate::presentation::dto::{CreateDelegationDto, UpdateDelegationDto};
 use crate::domain::entity::Delegation;
 use crate::infrastructure::persistence::DelegationRepository;
-use crate::presentation::dto::{CreateDelegationDto, UpdateDelegationDto};
 
 /// Application service for Delegation entities.
 ///
@@ -25,8 +25,12 @@ use crate::presentation::dto::{CreateDelegationDto, UpdateDelegationDto};
 ///     // add domain-specific dependencies here
 /// }
 /// ```
-pub type DelegationService =
-    GenericCrudService<Delegation, CreateDelegationDto, UpdateDelegationDto, DelegationRepository>;
+pub type DelegationService = GenericCrudService<
+    Delegation,
+    CreateDelegationDto,
+    UpdateDelegationDto,
+    DelegationRepository,
+>;
 
 // <<< CUSTOM
 // END CUSTOM
