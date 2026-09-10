@@ -6,14 +6,19 @@
 #              instead of carrying its own status/approved_by. Owns the
 #              ApprovalStatus enum and reuses ApprovalPriority.
 #
-# Unique invariant: one LIVE request per (company_id, resource_type, resource_id)
-# — enforced via a partial unique index where deleted_at IS NULL (the DSL does
-# not support a status-based partial). A withdrawn/cancelled request must be
-# soft-deleted before a new request for the same resource can be filed; the
-# stricter "one PENDING" semantic is enforced at the application layer.
+# Unique invariant: one LIVE request per resource — originally a partial unique
+# index on (company_id, resource_type, resource_id) where deleted_at IS NULL; the
+# company axis is gone (ADR-0029) and the invariant is re-declared org-scoped by
+# the composing service's tenancy decorator (the DSL does not support a
+# status-based partial). A withdrawn/cancelled request must be soft-deleted
+# before a new request for the same resource can be filed; the stricter "one
+# PENDING" semantic is enforced at the application layer.
 # =============================================================================
 
 models:
+  # Tenancy: none, by design (ADR-0029). Tenant-agnostic and reusable; a composing
+  # service's tenancy decorator owns org scoping for this table, including the
+  # org-scoped one-LIVE-request-per-resource partial unique (see the header note).
   - name: ApprovalRequest
     collection: approval_requests
     description: "A workflow's request for human approval — gates the workflow's transition."
@@ -22,11 +27,6 @@ models:
       id:
         type: uuid
         attributes: ["@id", "@default(uuid)"]
-
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "# logical FK organization.Company.id"
 
       resource_type:
         type: ApprovalResourceType
@@ -86,15 +86,9 @@ models:
 
     indexes:
       - type: index
-        fields: [company_id, status]
-      - type: index
         fields: [requested_by]
       - type: index
         fields: [resource_type, resource_id]
-      # One LIVE chain per resource (soft-delete-scoped; see file header).
-      - type: unique
-        fields: [company_id, resource_type, resource_id]
-        where: "deleted_at IS NULL"
 
 enums:
   - name: ApprovalStatus

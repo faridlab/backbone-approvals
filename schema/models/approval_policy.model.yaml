@@ -7,6 +7,10 @@
 # =============================================================================
 
 models:
+  # Tenancy: none, by design (ADR-0029). Tenant-agnostic and reusable; a composing
+  # service's tenancy decorator owns org scoping for this table, including the
+  # org-scoped per-resource name unique and the one-active-policy-per-resource rule
+  # that keep one policy family per unit.
   - name: ApprovalPolicy
     collection: approval_policies
     description: "Approval policy per resource type — defines the chain of approval steps."
@@ -15,11 +19,6 @@ models:
       id:
         type: uuid
         attributes: ["@id", "@default(uuid)"]
-
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "# logical FK organization.Company.id"
 
       resource_type:
         type: ApprovalResourceType
@@ -45,15 +44,6 @@ models:
         type: Metadata
         attributes: ["@audit_metadata"]
         description: "Audit metadata"
-
-    indexes:
-      - type: index
-        fields: [company_id]
-      - type: index
-        fields: [company_id, resource_type]
-      - type: unique
-        fields: [company_id, resource_type, name]
-        where: "deleted_at IS NULL"
 
 enums:
   - name: ApprovalPolicyStatus

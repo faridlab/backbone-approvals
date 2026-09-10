@@ -34,9 +34,6 @@ use crate::domain::entity::ApproverKind;
 #[serde(rename_all = "camelCase")]
 pub struct CreateApprovalStepTemplateDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "policy_id")]
     pub policy_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -65,9 +62,6 @@ pub struct CreateApprovalStepTemplateDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateApprovalStepTemplateDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "policy_id")]
     pub policy_id: Uuid,
@@ -98,9 +92,6 @@ pub struct UpdateApprovalStepTemplateDto {
 #[serde(rename_all = "camelCase")]
 pub struct PatchApprovalStepTemplateDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "policy_id")]
     pub policy_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -119,7 +110,7 @@ pub struct PatchApprovalStepTemplateDto {
 impl PatchApprovalStepTemplateDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.policy_id.is_some() || self.step_no.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.sla_hours.is_some() || self.all_of.is_some()
+        self.policy_id.is_some() || self.step_no.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.sla_hours.is_some() || self.all_of.is_some()
     }
 }
 
@@ -137,8 +128,6 @@ impl PatchApprovalStepTemplateDto {
 pub struct ApprovalStepTemplateResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub policy_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -204,9 +193,9 @@ impl ApprovalStepTemplateListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalStepTemplateSummaryDto {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub policy_id: Uuid,
     pub step_no: i32,
+    pub approver_kind: ApproverKind,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -218,7 +207,6 @@ impl From<ApprovalStepTemplate> for ApprovalStepTemplateResponseDto {
     fn from(entity: ApprovalStepTemplate) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             policy_id: entity.policy_id,
             step_no: entity.step_no,
             approver_kind: entity.approver_kind,
@@ -235,9 +223,9 @@ impl From<ApprovalStepTemplate> for ApprovalStepTemplateSummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             policy_id: entity.policy_id,
             step_no: entity.step_no,
+            approver_kind: entity.approver_kind,
             created_at,
         }
     }
@@ -247,7 +235,6 @@ impl From<CreateApprovalStepTemplateDto> for ApprovalStepTemplate {
     fn from(dto: CreateApprovalStepTemplateDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             policy_id: dto.policy_id,
             step_no: dto.step_no,
             approver_kind: dto.approver_kind,
@@ -263,7 +250,6 @@ impl From<&ApprovalStepTemplate> for ApprovalStepTemplateResponseDto {
     fn from(entity: &ApprovalStepTemplate) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             policy_id: entity.policy_id.clone(),
             step_no: entity.step_no.clone(),
             approver_kind: entity.approver_kind.clone(),
@@ -283,7 +269,6 @@ impl backbone_core::FromCreateDto<CreateApprovalStepTemplateDto> for ApprovalSte
 
 impl backbone_core::ApplyUpdateDto<UpdateApprovalStepTemplateDto> for ApprovalStepTemplate {
     fn apply_update(mut self, dto: UpdateApprovalStepTemplateDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.policy_id = dto.policy_id;
         self.step_no = dto.step_no;
         self.approver_kind = dto.approver_kind;

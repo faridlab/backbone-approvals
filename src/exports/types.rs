@@ -48,7 +48,6 @@ impl From<ApprovalPolicyId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalPolicyDto {
     pub id: ApprovalPolicyId,
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     pub name: String,
     pub status: ApprovalPolicyStatus,
@@ -108,7 +107,6 @@ impl From<ApprovalRequestId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalRequestDto {
     pub id: ApprovalRequestId,
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     pub resource_id: Uuid,
     pub policy_id: Option<Uuid>,
@@ -174,7 +172,6 @@ impl From<ApprovalStepId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalStepDto {
     pub id: ApprovalStepId,
-    pub company_id: Uuid,
     pub request_id: Uuid,
     pub step_no: i32,
     pub approver_kind: ApproverKind,
@@ -239,7 +236,6 @@ impl From<ApprovalStepTemplateId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalStepTemplateDto {
     pub id: ApprovalStepTemplateId,
-    pub company_id: Uuid,
     pub policy_id: Uuid,
     pub step_no: i32,
     pub approver_kind: ApproverKind,
@@ -299,7 +295,6 @@ impl From<DelegationId> for Uuid {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DelegationDto {
     pub id: DelegationId,
-    pub company_id: Uuid,
     pub approver_id: Uuid,
     pub delegate_to_id: Uuid,
     pub valid_from: NaiveDate,

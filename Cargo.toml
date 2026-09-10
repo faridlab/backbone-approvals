@@ -81,5 +81,4 @@ pretty_assertions = "1.0"
 # Integration testing framework — the generated tests/integration_tests.rs hits a live server
 # via reqwest; guarded-route probes hit the router in-process via tower's ServiceExt::oneshot.
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
-jsonwebtoken = "9.3"
 rand = "0.8"

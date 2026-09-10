@@ -24,7 +24,6 @@ impl TestDataGenerator for DelegationTestData {
         let now = Utc::now().to_rfc3339();
         json!({
             "id": Uuid::new_v4().to_string(),
-            "company_id": Uuid::new_v4().to_string(),
             "approver_id": Uuid::new_v4().to_string(),
             "delegate_to_id": Uuid::new_v4().to_string(),
             "valid_from": Utc::now().format("%Y-%m-%d").to_string(),
@@ -39,7 +38,6 @@ impl TestDataGenerator for DelegationTestData {
         let now = Utc::now().to_rfc3339();
         json!({
             "id": id,
-            "company_id": Uuid::new_v4().to_string(),
             "approver_id": Uuid::new_v4().to_string(),
             "delegate_to_id": Uuid::new_v4().to_string(),
             "valid_from": Utc::now().format("%Y-%m-%d").to_string(),

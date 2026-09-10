@@ -20,5 +20,10 @@ user_owned:
   - "tests/features/**"
   - "tests/integrity_probes.rs"
 
+  # Hand-authored migrations (the tenancy strip — its ordering guard is hand-written
+  # logic, not schema-derived emission).
+  - "migrations/20260911061000_strip_company_tenancy.up.sql"
+  - "migrations/20260911061000_strip_company_tenancy.down.sql"
+
   # Hand-authored module documentation.
   - "docs/**"

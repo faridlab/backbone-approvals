@@ -44,7 +44,6 @@ pub struct ApprovalStepPaginatedResult {
 /// Filter parameters for list queries
 #[derive(Debug, Clone, Default)]
 pub struct ApprovalStepFilter {
-    pub company_id: Option<Uuid>,
     pub request_id: Option<Uuid>,
     pub approver_kind: Option<ApproverKind>,
     pub approver_ref: Option<Uuid>,
@@ -57,7 +56,7 @@ pub struct ApprovalStepFilter {
 impl ApprovalStepFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some() || self.request_id.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.assigned_to.is_some() || self.delegated_from.is_some() || self.status.is_some() || self.comment.is_some()
+        self.request_id.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.assigned_to.is_some() || self.delegated_from.is_some() || self.status.is_some() || self.comment.is_some()
     }
 }
 

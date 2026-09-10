@@ -2,10 +2,10 @@
 //! (hand-authored, user-owned; see `metaphor.codegen.yaml`).
 //!
 //! Family convention (expenses/timeoff): the service owns the verbs and the transactions;
-//! this repo owns the statements. Every call rides the caller's bound connection —
-//! `company_scope::bind_company_on` was applied by the service — so the RLS fence scopes
-//! each statement, and the explicit `company_id = $n` predicates are belt-and-braces (a
-//! cross-tenant id matches zero rows, surfacing as 404, never as leakage).
+//! this repo owns the statements. Every call rides the caller's transaction, onto which
+//! the service relayed the AMBIENT org scope (`org_scope::bind_org_scope_on`) — so the
+//! composing decorator's row-level fence scopes each statement, and a cross-tenant id
+//! matches zero rows, surfacing as 404, never as leakage.
 //!
 //! Soft-delete lives in `metadata` JSONB (`deleted_at` key), matching the module's partial
 //! indexes: "live row" predicates are `(metadata->>'deleted_at') IS NULL`.
@@ -28,16 +28,14 @@ impl ApprovalsWriteRepository {
     pub async fn find_live_request(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         resource_type: &ApprovalResourceType,
         resource_id: Uuid,
     ) -> Result<Option<ApprovalRequest>, sqlx::Error> {
         sqlx::query_as::<_, ApprovalRequest>(
             r#"SELECT * FROM approvals.approval_requests
-                WHERE company_id = $1 AND resource_type = $2 AND resource_id = $3
+                WHERE resource_type = $1 AND resource_id = $2
                   AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(company)
         .bind(resource_type)
         .bind(resource_id)
         .fetch_optional(&mut *conn)
@@ -48,15 +46,13 @@ impl ApprovalsWriteRepository {
     pub async fn get_request(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
     ) -> Result<Option<ApprovalRequest>, sqlx::Error> {
         sqlx::query_as::<_, ApprovalRequest>(
             r#"SELECT * FROM approvals.approval_requests
-                WHERE company_id = $1 AND id = $2
+                WHERE id = $1
                   AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(company)
         .bind(request_id)
         .fetch_optional(&mut *conn)
         .await
@@ -64,24 +60,23 @@ impl ApprovalsWriteRepository {
 
     // ── policy / templates ──────────────────────────────────────────────────
 
-    /// The active policy for a resource. The partial unique index
-    /// `approval_policies_single_active` keeps exactly one active policy per company and
-    /// resource type; the deterministic ordering below is a defense for rows that predate
-    /// the index, not a picker between legitimate alternatives.
+    /// The active policy for a resource. The org-scoped one-active-policy-per-resource
+    /// unique (owned by the composing service's tenancy decorator) keeps exactly one
+    /// active policy per unit and resource type; the deterministic ordering below is a
+    /// defense for rows that predate that fence, not a picker between legitimate
+    /// alternatives.
     pub async fn find_active_policy(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         resource_type: &ApprovalResourceType,
     ) -> Result<Option<ApprovalPolicy>, sqlx::Error> {
         sqlx::query_as::<_, ApprovalPolicy>(
             r#"SELECT * FROM approvals.approval_policies
-                WHERE company_id = $1 AND resource_type = $2 AND status = 'active'
+                WHERE resource_type = $1 AND status = 'active'
                   AND (metadata->>'deleted_at') IS NULL
                 ORDER BY (metadata->>'created_at') NULLS LAST, id
                 LIMIT 1"#,
         )
-        .bind(company)
         .bind(resource_type)
         .fetch_optional(&mut *conn)
         .await
@@ -110,17 +105,15 @@ impl ApprovalsWriteRepository {
     pub async fn live_steps_at(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
         step_no: i32,
     ) -> Result<Vec<ApprovalStep>, sqlx::Error> {
         sqlx::query_as::<_, ApprovalStep>(
             r#"SELECT * FROM approvals.approval_steps
-                WHERE company_id = $1 AND request_id = $2 AND step_no = $3
+                WHERE request_id = $1 AND step_no = $2
                   AND (metadata->>'deleted_at') IS NULL
                 ORDER BY assigned_to"#,
         )
-        .bind(company)
         .bind(request_id)
         .bind(step_no)
         .fetch_all(&mut *conn)
@@ -131,17 +124,15 @@ impl ApprovalsWriteRepository {
     pub async fn count_pending_steps_at(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
         step_no: i32,
     ) -> Result<i64, sqlx::Error> {
         sqlx::query_scalar(
             r#"SELECT COUNT(*) FROM approvals.approval_steps
-                WHERE company_id = $1 AND request_id = $2 AND step_no = $3
+                WHERE request_id = $1 AND step_no = $2
                   AND status = 'pending'
                   AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(company)
         .bind(request_id)
         .bind(step_no)
         .fetch_one(&mut *conn)
@@ -152,15 +143,13 @@ impl ApprovalsWriteRepository {
     pub async fn max_step_no(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
     ) -> Result<i32, sqlx::Error> {
         sqlx::query_scalar(
             r#"SELECT COALESCE(MAX(step_no), 0) FROM approvals.approval_steps
-                WHERE company_id = $1 AND request_id = $2
+                WHERE request_id = $1
                   AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(company)
         .bind(request_id)
         .fetch_one(&mut *conn)
         .await
@@ -173,18 +162,16 @@ impl ApprovalsWriteRepository {
     pub async fn find_active_delegation_for(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         approver: Uuid,
     ) -> Result<Option<Uuid>, sqlx::Error> {
         sqlx::query_scalar(
             r#"SELECT delegate_to_id FROM approvals.delegations
-                WHERE company_id = $1 AND approver_id = $2 AND status = 'active'
+                WHERE approver_id = $1 AND status = 'active'
                   AND valid_from <= CURRENT_DATE AND valid_to >= CURRENT_DATE
                   AND (metadata->>'deleted_at') IS NULL
                 ORDER BY valid_from DESC
                 LIMIT 1"#,
         )
-        .bind(company)
         .bind(approver)
         .fetch_optional(&mut *conn)
         .await
@@ -194,19 +181,17 @@ impl ApprovalsWriteRepository {
     pub async fn delegation_exists_for(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         approver: Uuid,
         delegate: Uuid,
     ) -> Result<bool, sqlx::Error> {
         sqlx::query_scalar(
             r#"SELECT EXISTS(
                    SELECT 1 FROM approvals.delegations
-                    WHERE company_id = $1 AND approver_id = $2 AND delegate_to_id = $3
+                    WHERE approver_id = $1 AND delegate_to_id = $2
                       AND status = 'active'
                       AND valid_from <= CURRENT_DATE AND valid_to >= CURRENT_DATE
                       AND (metadata->>'deleted_at') IS NULL)"#,
         )
-        .bind(company)
         .bind(approver)
         .bind(delegate)
         .fetch_one(&mut *conn)
@@ -218,15 +203,13 @@ impl ApprovalsWriteRepository {
     pub async fn get_delegation(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         delegation_id: Uuid,
     ) -> Result<Option<crate::domain::entity::Delegation>, sqlx::Error> {
         sqlx::query_as::<_, crate::domain::entity::Delegation>(
             r#"SELECT * FROM approvals.delegations
-                WHERE company_id = $1 AND id = $2
+                WHERE id = $1
                   AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(company)
         .bind(delegation_id)
         .fetch_optional(&mut *conn)
         .await
@@ -238,7 +221,6 @@ impl ApprovalsWriteRepository {
     pub async fn insert_delegation(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         id: Uuid,
         approver: Uuid,
         delegate_to: Uuid,
@@ -248,14 +230,13 @@ impl ApprovalsWriteRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO approvals.delegations
-                   (id, company_id, approver_id, delegate_to_id, valid_from, valid_to,
+                   (id, approver_id, delegate_to_id, valid_from, valid_to,
                     reason, status, metadata)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, 'active',
-                       jsonb_build_object('created_by', to_jsonb($3::uuid),
+               VALUES ($1, $2, $3, $4, $5, $6, 'active',
+                       jsonb_build_object('created_by', to_jsonb($2::uuid),
                                           'source', 'self_service'))"#,
         )
         .bind(id)
-        .bind(company)
         .bind(approver)
         .bind(delegate_to)
         .bind(valid_from)
@@ -272,7 +253,6 @@ impl ApprovalsWriteRepository {
     pub async fn revoke_delegation(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         delegation_id: Uuid,
         revoked_by: Uuid,
         now: DateTime<Utc>,
@@ -281,14 +261,13 @@ impl ApprovalsWriteRepository {
             r#"UPDATE approvals.delegations SET
                    status = 'revoked',
                    metadata = metadata || jsonb_build_object(
-                       'revoked_at', to_jsonb($4::timestamptz),
-                       'revoked_by', to_jsonb($3::uuid))
-               WHERE company_id = $1 AND id = $2
+                       'revoked_at', to_jsonb($3::timestamptz),
+                       'revoked_by', to_jsonb($2::uuid))
+               WHERE id = $1
                  AND status = 'active'
                  AND (metadata->>'deleted_at') IS NULL
                RETURNING id"#,
         )
-        .bind(company)
         .bind(delegation_id)
         .bind(revoked_by)
         .bind(now)
@@ -306,14 +285,13 @@ impl ApprovalsWriteRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO approvals.approval_requests
-                   (id, company_id, resource_type, resource_id, policy_id, requested_by,
+                   (id, resource_type, resource_id, policy_id, requested_by,
                     status, current_step, priority, submitted_at, decided_at, decided_by,
                     summary, metadata)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                       jsonb_build_object('created_by', to_jsonb($6::uuid), 'created_at', to_jsonb($10::timestamptz)))"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                       jsonb_build_object('created_by', to_jsonb($5::uuid), 'created_at', to_jsonb($9::timestamptz)))"#,
         )
         .bind(request.id)
-        .bind(request.company_id)
         .bind(request.resource_type)
         .bind(request.resource_id)
         .bind(request.policy_id)
@@ -338,13 +316,12 @@ impl ApprovalsWriteRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"INSERT INTO approvals.approval_steps
-                   (id, company_id, request_id, step_no, approver_kind, approver_ref,
+                   (id, request_id, step_no, approver_kind, approver_ref,
                     assigned_to, delegated_from, status, acted_at, comment, sla_due_at, metadata)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                       jsonb_build_object('created_by', to_jsonb($7::uuid), 'created_at', to_jsonb(now())))"#,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                       jsonb_build_object('created_by', to_jsonb($6::uuid), 'created_at', to_jsonb(now())))"#,
         )
         .bind(step.id)
-        .bind(step.company_id)
         .bind(step.request_id)
         .bind(step.step_no)
         .bind(step.approver_kind)
@@ -370,7 +347,6 @@ impl ApprovalsWriteRepository {
     pub async fn mark_step_decided(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         step_id: Uuid,
         status: ApprovalStepStatus,
         comment: Option<&str>,
@@ -379,16 +355,15 @@ impl ApprovalsWriteRepository {
     ) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
             r#"UPDATE approvals.approval_steps SET
-                   status = $3,
-                   acted_at = $6,
-                   comment = COALESCE($4, comment),
-                   delegated_from = COALESCE($5, delegated_from),
-                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($6::timestamptz))
-               WHERE company_id = $1 AND id = $2
+                   status = $2,
+                   acted_at = $5,
+                   comment = COALESCE($3, comment),
+                   delegated_from = COALESCE($4, delegated_from),
+                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($5::timestamptz))
+               WHERE id = $1
                  AND status = 'pending'
                  AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(company)
         .bind(step_id)
         .bind(status)
         .bind(comment)
@@ -404,7 +379,6 @@ impl ApprovalsWriteRepository {
     pub async fn skip_other_pending_steps(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
         except: Option<Uuid>,
         now: DateTime<Utc>,
@@ -412,14 +386,13 @@ impl ApprovalsWriteRepository {
         sqlx::query(
             r#"UPDATE approvals.approval_steps SET
                    status = 'skipped',
-                   acted_at = $4,
-                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($4::timestamptz))
-               WHERE company_id = $1 AND request_id = $2
+                   acted_at = $3,
+                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($3::timestamptz))
+               WHERE request_id = $1
                  AND status = 'pending'
-                 AND ($3::uuid IS NULL OR id <> $3)
+                 AND ($2::uuid IS NULL OR id <> $2)
                  AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(company)
         .bind(request_id)
         .bind(except)
         .bind(now)
@@ -440,7 +413,6 @@ impl ApprovalsWriteRepository {
     pub async fn skip_sibling_pending_steps(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
         step_no: i32,
         approver_kind: crate::domain::entity::ApproverKind,
@@ -451,15 +423,14 @@ impl ApprovalsWriteRepository {
         sqlx::query(
             r#"UPDATE approvals.approval_steps SET
                    status = 'skipped',
-                   acted_at = $7,
-                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($7::timestamptz))
-               WHERE company_id = $1 AND request_id = $2 AND step_no = $3
-                 AND approver_kind = $4 AND approver_ref IS NOT DISTINCT FROM $5
-                 AND id <> $6
+                   acted_at = $6,
+                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($6::timestamptz))
+               WHERE request_id = $1 AND step_no = $2
+                 AND approver_kind = $3 AND approver_ref IS NOT DISTINCT FROM $4
+                 AND id <> $5
                  AND status = 'pending'
                  AND (metadata->>'deleted_at') IS NULL"#,
         )
-        .bind(company)
         .bind(request_id)
         .bind(step_no)
         .bind(approver_kind)
@@ -476,21 +447,19 @@ impl ApprovalsWriteRepository {
     pub async fn set_current_step(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
         step_no: i32,
         now: DateTime<Utc>,
     ) -> Result<Option<ApprovalStatus>, sqlx::Error> {
         sqlx::query_scalar(
             r#"UPDATE approvals.approval_requests SET
-                   current_step = $3,
-                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($4::timestamptz))
-               WHERE company_id = $1 AND id = $2
+                   current_step = $2,
+                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($3::timestamptz))
+               WHERE id = $1
                  AND status = 'pending'
                   AND (metadata->>'deleted_at') IS NULL
                RETURNING status"#,
         )
-        .bind(company)
         .bind(request_id)
         .bind(step_no)
         .bind(now)
@@ -503,7 +472,6 @@ impl ApprovalsWriteRepository {
     pub async fn finish_request(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
         status: ApprovalStatus,
         decided_by: Option<Uuid>,
@@ -511,16 +479,15 @@ impl ApprovalsWriteRepository {
     ) -> Result<Option<ApprovalStatus>, sqlx::Error> {
         sqlx::query_scalar(
             r#"UPDATE approvals.approval_requests SET
-                   status = $3,
-                   decided_at = $5,
-                   decided_by = $4,
-                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($5::timestamptz))
-               WHERE company_id = $1 AND id = $2
+                   status = $2,
+                   decided_at = $4,
+                   decided_by = $3,
+                   metadata = metadata || jsonb_build_object('updated_at', to_jsonb($4::timestamptz))
+               WHERE id = $1
                  AND status = 'pending'
                   AND (metadata->>'deleted_at') IS NULL
                RETURNING status"#,
         )
-        .bind(company)
         .bind(request_id)
         .bind(status)
         .bind(decided_by)
@@ -535,23 +502,21 @@ impl ApprovalsWriteRepository {
     pub async fn withdraw_request(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         request_id: Uuid,
         now: DateTime<Utc>,
     ) -> Result<Option<ApprovalStatus>, sqlx::Error> {
         sqlx::query_scalar(
             r#"UPDATE approvals.approval_requests SET
                    status = 'withdrawn',
-                   decided_at = $3,
+                   decided_at = $2,
                    metadata = metadata || jsonb_build_object(
-                       'deleted_at', to_jsonb($3::timestamptz),
-                       'updated_at', to_jsonb($3::timestamptz))
-               WHERE company_id = $1 AND id = $2
+                       'deleted_at', to_jsonb($2::timestamptz),
+                       'updated_at', to_jsonb($2::timestamptz))
+               WHERE id = $1
                  AND status = 'pending'
                   AND (metadata->>'deleted_at') IS NULL
                RETURNING status"#,
         )
-        .bind(company)
         .bind(request_id)
         .bind(now)
         .fetch_optional(&mut *conn)

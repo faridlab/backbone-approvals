@@ -34,9 +34,6 @@ use crate::domain::entity::DelegationStatus;
 #[serde(rename_all = "camelCase")]
 pub struct CreateDelegationDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "approver_id")]
     pub approver_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
@@ -66,9 +63,6 @@ pub struct CreateDelegationDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDelegationDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "approver_id")]
     pub approver_id: Uuid,
@@ -100,9 +94,6 @@ pub struct UpdateDelegationDto {
 #[serde(rename_all = "camelCase")]
 pub struct PatchDelegationDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "approver_id")]
     pub approver_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
@@ -123,7 +114,7 @@ pub struct PatchDelegationDto {
 impl PatchDelegationDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.approver_id.is_some() || self.delegate_to_id.is_some() || self.valid_from.is_some() || self.valid_to.is_some() || self.reason.is_some() || self.status.is_some()
+        self.approver_id.is_some() || self.delegate_to_id.is_some() || self.valid_from.is_some() || self.valid_to.is_some() || self.reason.is_some() || self.status.is_some()
     }
 }
 
@@ -141,8 +132,6 @@ impl PatchDelegationDto {
 pub struct DelegationResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub approver_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
@@ -210,9 +199,9 @@ impl DelegationListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct DelegationSummaryDto {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub approver_id: Uuid,
     pub delegate_to_id: Uuid,
+    pub valid_from: NaiveDate,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -224,7 +213,6 @@ impl From<Delegation> for DelegationResponseDto {
     fn from(entity: Delegation) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             approver_id: entity.approver_id,
             delegate_to_id: entity.delegate_to_id,
             valid_from: entity.valid_from,
@@ -241,9 +229,9 @@ impl From<Delegation> for DelegationSummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             approver_id: entity.approver_id,
             delegate_to_id: entity.delegate_to_id,
+            valid_from: entity.valid_from,
             created_at,
         }
     }
@@ -253,7 +241,6 @@ impl From<CreateDelegationDto> for Delegation {
     fn from(dto: CreateDelegationDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             approver_id: dto.approver_id,
             delegate_to_id: dto.delegate_to_id,
             valid_from: dto.valid_from,
@@ -269,7 +256,6 @@ impl From<&Delegation> for DelegationResponseDto {
     fn from(entity: &Delegation) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             approver_id: entity.approver_id.clone(),
             delegate_to_id: entity.delegate_to_id.clone(),
             valid_from: entity.valid_from.clone(),
@@ -289,7 +275,6 @@ impl backbone_core::FromCreateDto<CreateDelegationDto> for Delegation {
 
 impl backbone_core::ApplyUpdateDto<UpdateDelegationDto> for Delegation {
     fn apply_update(mut self, dto: UpdateDelegationDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.approver_id = dto.approver_id;
         self.delegate_to_id = dto.delegate_to_id;
         self.valid_from = dto.valid_from;

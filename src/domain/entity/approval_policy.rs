@@ -51,7 +51,6 @@ impl std::ops::Deref for ApprovalPolicyId {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct ApprovalPolicy {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     pub name: String,
     pub status: ApprovalPolicyStatus,
@@ -68,10 +67,9 @@ impl ApprovalPolicy {
     }
 
     /// Create a new ApprovalPolicy with required fields
-    pub fn new(company_id: Uuid, resource_type: ApprovalResourceType, name: String, status: ApprovalPolicyStatus) -> Self {
+    pub fn new(resource_type: ApprovalResourceType, name: String, status: ApprovalPolicyStatus) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id,
             resource_type,
             name,
             status,
@@ -154,9 +152,6 @@ impl ApprovalPolicy {
     pub fn apply_patch(&mut self, fields: std::collections::HashMap<String, serde_json::Value>) {
         for (key, value) in fields {
             match key.as_str() {
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
-                }
                 "resource_type" => {
                     if let Ok(v) = serde_json::from_value(value) { self.resource_type = v; }
                 }
@@ -223,16 +218,12 @@ impl backbone_orm::EntityRepoMeta for ApprovalPolicy {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("resource_type".to_string(), "approval_resource_type".to_string());
         m.insert("status".to_string(), "approval_policy_status".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
         &["name"]
-    }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
     }
 }
 
@@ -242,7 +233,6 @@ impl backbone_orm::EntityRepoMeta for ApprovalPolicy {
 /// System fields (id, metadata, timestamps) are auto-initialized.
 #[derive(Debug, Clone, Default)]
 pub struct ApprovalPolicyBuilder {
-    company_id: Option<Uuid>,
     resource_type: Option<ApprovalResourceType>,
     name: Option<String>,
     status: Option<ApprovalPolicyStatus>,
@@ -250,12 +240,6 @@ pub struct ApprovalPolicyBuilder {
 }
 
 impl ApprovalPolicyBuilder {
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
-
     /// Set the resource_type field (required)
     pub fn resource_type(mut self, value: ApprovalResourceType) -> Self {
         self.resource_type = Some(value);
@@ -284,13 +268,11 @@ impl ApprovalPolicyBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<ApprovalPolicy, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let resource_type = self.resource_type.ok_or_else(|| "resource_type is required".to_string())?;
         let name = self.name.ok_or_else(|| "name is required".to_string())?;
 
         Ok(ApprovalPolicy {
             id: Uuid::new_v4(),
-            company_id,
             resource_type,
             name,
             status: self.status.unwrap_or_default(),

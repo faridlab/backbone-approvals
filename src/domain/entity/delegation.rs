@@ -50,7 +50,6 @@ impl std::ops::Deref for DelegationId {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Delegation {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub approver_id: Uuid,
     pub delegate_to_id: Uuid,
     pub valid_from: NaiveDate,
@@ -69,10 +68,9 @@ impl Delegation {
     }
 
     /// Create a new Delegation with required fields
-    pub fn new(company_id: Uuid, approver_id: Uuid, delegate_to_id: Uuid, valid_from: NaiveDate, valid_to: NaiveDate, status: DelegationStatus) -> Self {
+    pub fn new(approver_id: Uuid, delegate_to_id: Uuid, valid_from: NaiveDate, valid_to: NaiveDate, status: DelegationStatus) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id,
             approver_id,
             delegate_to_id,
             valid_from,
@@ -157,9 +155,6 @@ impl Delegation {
     pub fn apply_patch(&mut self, fields: std::collections::HashMap<String, serde_json::Value>) {
         for (key, value) in fields {
             match key.as_str() {
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
-                }
                 "approver_id" => {
                     if let Ok(v) = serde_json::from_value(value) { self.approver_id = v; }
                 }
@@ -232,7 +227,6 @@ impl backbone_orm::EntityRepoMeta for Delegation {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("approver_id".to_string(), "uuid".to_string());
         m.insert("delegate_to_id".to_string(), "uuid".to_string());
         m.insert("status".to_string(), "delegation_status".to_string());
@@ -240,9 +234,6 @@ impl backbone_orm::EntityRepoMeta for Delegation {
     }
     fn search_fields() -> &'static [&'static str] {
         &[]
-    }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
     }
 }
 
@@ -252,7 +243,6 @@ impl backbone_orm::EntityRepoMeta for Delegation {
 /// System fields (id, metadata, timestamps) are auto-initialized.
 #[derive(Debug, Clone, Default)]
 pub struct DelegationBuilder {
-    company_id: Option<Uuid>,
     approver_id: Option<Uuid>,
     delegate_to_id: Option<Uuid>,
     valid_from: Option<NaiveDate>,
@@ -262,12 +252,6 @@ pub struct DelegationBuilder {
 }
 
 impl DelegationBuilder {
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
-
     /// Set the approver_id field (required)
     pub fn approver_id(mut self, value: Uuid) -> Self {
         self.approver_id = Some(value);
@@ -308,7 +292,6 @@ impl DelegationBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<Delegation, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let approver_id = self.approver_id.ok_or_else(|| "approver_id is required".to_string())?;
         let delegate_to_id = self.delegate_to_id.ok_or_else(|| "delegate_to_id is required".to_string())?;
         let valid_from = self.valid_from.ok_or_else(|| "valid_from is required".to_string())?;
@@ -316,7 +299,6 @@ impl DelegationBuilder {
 
         Ok(Delegation {
             id: Uuid::new_v4(),
-            company_id,
             approver_id,
             delegate_to_id,
             valid_from,

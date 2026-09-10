@@ -219,7 +219,6 @@ dependencies = [
  "backbone-orm",
  "chrono",
  "config",
- "jsonwebtoken",
  "mockall",
  "pretty_assertions",
  "prost",

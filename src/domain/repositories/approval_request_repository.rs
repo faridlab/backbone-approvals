@@ -44,7 +44,6 @@ pub struct ApprovalRequestPaginatedResult {
 /// Filter parameters for list queries
 #[derive(Debug, Clone, Default)]
 pub struct ApprovalRequestFilter {
-    pub company_id: Option<Uuid>,
     pub resource_type: Option<ApprovalResourceType>,
     pub resource_id: Option<Uuid>,
     pub policy_id: Option<Uuid>,
@@ -57,7 +56,7 @@ pub struct ApprovalRequestFilter {
 impl ApprovalRequestFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some() || self.resource_type.is_some() || self.resource_id.is_some() || self.policy_id.is_some() || self.requested_by.is_some() || self.status.is_some() || self.priority.is_some() || self.decided_by.is_some()
+        self.resource_type.is_some() || self.resource_id.is_some() || self.policy_id.is_some() || self.requested_by.is_some() || self.status.is_some() || self.priority.is_some() || self.decided_by.is_some()
     }
 }
 

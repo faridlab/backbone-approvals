@@ -7,6 +7,8 @@
 # =============================================================================
 
 models:
+  # Tenancy: none, by design (ADR-0029). Tenant-agnostic and reusable; a composing
+  # service's tenancy decorator owns org scoping for this table.
   - name: ApprovalStepTemplate
     collection: approval_step_templates
     description: "Ordered approver template within a policy (step_no, approver kind, SLA)."
@@ -15,11 +17,6 @@ models:
       id:
         type: uuid
         attributes: ["@id", "@default(uuid)"]
-
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "# logical FK organization.Company.id"
 
       policy_id:
         type: uuid

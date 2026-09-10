@@ -44,7 +44,6 @@ pub struct DelegationPaginatedResult {
 /// Filter parameters for list queries
 #[derive(Debug, Clone, Default)]
 pub struct DelegationFilter {
-    pub company_id: Option<Uuid>,
     pub approver_id: Option<Uuid>,
     pub delegate_to_id: Option<Uuid>,
     pub reason: Option<String>,
@@ -54,7 +53,7 @@ pub struct DelegationFilter {
 impl DelegationFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some() || self.approver_id.is_some() || self.delegate_to_id.is_some() || self.reason.is_some() || self.status.is_some()
+        self.approver_id.is_some() || self.delegate_to_id.is_some() || self.reason.is_some() || self.status.is_some()
     }
 }
 

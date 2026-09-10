@@ -7,6 +7,8 @@
 # =============================================================================
 
 models:
+  # Tenancy: none, by design (ADR-0029). Tenant-agnostic and reusable; a composing
+  # service's tenancy decorator owns org scoping for this table.
   - name: Delegation
     collection: delegations
     description: "An approver's delegation of approval authority for a window of time."
@@ -15,11 +17,6 @@ models:
       id:
         type: uuid
         attributes: ["@id", "@default(uuid)"]
-
-      company_id:
-        type: uuid
-        attributes: ["@required", "@exclude_from_foreign_key_check"]
-        description: "# logical FK organization.Company.id"
 
       approver_id:
         type: uuid
@@ -61,8 +58,6 @@ models:
         fields: [approver_id]
       - type: index
         fields: [delegate_to_id]
-      - type: index
-        fields: [company_id, status]
 
 enums:
   - name: DelegationStatus

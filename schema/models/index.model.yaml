@@ -12,10 +12,12 @@
 module: approvals
 version: 2
 schema: approvals
-
-# ADR-0014 company fence (Wave 1 P0 sweep, 2026-08-16): the approval spine is company-private: policies, requests, steps, and
-# delegations never cross companies (pillar-hrms H-9).
-company_fence: strict
+# Tenancy: none, by design (ADR-0029). The module is tenant-agnostic and reusable —
+# it ships no scoping column and no fence declaration. A composing backend-service
+# that wants these tables org-scoped declares them in its tenancy.yaml; the
+# decorator installs org_unit_id, the RLS policy, and the org-scoped per-resource
+# uniques (one live request per resource, one policy name per resource family,
+# one active policy per resource) at composition time.
 description: "the approval spine — requests, multi-step chains, delegation, SLA"
 
 config:

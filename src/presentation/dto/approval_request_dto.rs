@@ -35,9 +35,6 @@ use crate::domain::entity::ApprovalStatus;
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateApprovalRequestDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[serde(alias = "resource_type")]
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
@@ -75,9 +72,6 @@ pub struct CreateApprovalRequestDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateApprovalRequestDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[serde(alias = "resource_type")]
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
@@ -115,9 +109,6 @@ pub struct UpdateApprovalRequestDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct PatchApprovalRequestDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "resource_type")]
     pub resource_type: Option<ApprovalResourceType>,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
@@ -147,7 +138,7 @@ pub struct PatchApprovalRequestDto {
 impl PatchApprovalRequestDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.resource_type.is_some() || self.resource_id.is_some() || self.policy_id.is_some() || self.requested_by.is_some() || self.status.is_some() || self.current_step.is_some() || self.priority.is_some() || self.submitted_at.is_some() || self.decided_at.is_some() || self.decided_by.is_some() || self.summary.is_some()
+        self.resource_type.is_some() || self.resource_id.is_some() || self.policy_id.is_some() || self.requested_by.is_some() || self.status.is_some() || self.current_step.is_some() || self.priority.is_some() || self.submitted_at.is_some() || self.decided_at.is_some() || self.decided_by.is_some() || self.summary.is_some()
     }
 }
 
@@ -165,8 +156,6 @@ impl PatchApprovalRequestDto {
 pub struct ApprovalRequestResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub resource_id: Uuid,
@@ -237,9 +226,9 @@ impl ApprovalRequestListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalRequestSummaryDto {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     pub resource_id: Uuid,
+    pub policy_id: Option<Uuid>,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -251,7 +240,6 @@ impl From<ApprovalRequest> for ApprovalRequestResponseDto {
     fn from(entity: ApprovalRequest) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             resource_type: entity.resource_type,
             resource_id: entity.resource_id,
             policy_id: entity.policy_id,
@@ -273,9 +261,9 @@ impl From<ApprovalRequest> for ApprovalRequestSummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             resource_type: entity.resource_type,
             resource_id: entity.resource_id,
+            policy_id: entity.policy_id,
             created_at,
         }
     }
@@ -285,7 +273,6 @@ impl From<CreateApprovalRequestDto> for ApprovalRequest {
     fn from(dto: CreateApprovalRequestDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             resource_type: dto.resource_type,
             resource_id: dto.resource_id,
             policy_id: dto.policy_id,
@@ -306,7 +293,6 @@ impl From<&ApprovalRequest> for ApprovalRequestResponseDto {
     fn from(entity: &ApprovalRequest) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             resource_type: entity.resource_type.clone(),
             resource_id: entity.resource_id.clone(),
             policy_id: entity.policy_id.clone(),
@@ -331,7 +317,6 @@ impl backbone_core::FromCreateDto<CreateApprovalRequestDto> for ApprovalRequest 
 
 impl backbone_core::ApplyUpdateDto<UpdateApprovalRequestDto> for ApprovalRequest {
     fn apply_update(mut self, dto: UpdateApprovalRequestDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.resource_type = dto.resource_type;
         self.resource_id = dto.resource_id;
         self.policy_id = dto.policy_id;

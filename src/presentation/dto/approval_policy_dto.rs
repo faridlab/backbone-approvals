@@ -34,9 +34,6 @@ use crate::domain::entity::ApprovalResourceType;
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct CreateApprovalPolicyDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[serde(alias = "resource_type")]
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
@@ -59,9 +56,6 @@ pub struct CreateApprovalPolicyDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateApprovalPolicyDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[serde(alias = "resource_type")]
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
@@ -84,9 +78,6 @@ pub struct UpdateApprovalPolicyDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct PatchApprovalPolicyDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none", alias = "resource_type")]
     pub resource_type: Option<ApprovalResourceType>,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
@@ -101,7 +92,7 @@ pub struct PatchApprovalPolicyDto {
 impl PatchApprovalPolicyDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.resource_type.is_some() || self.name.is_some() || self.status.is_some() || self.description.is_some()
+        self.resource_type.is_some() || self.name.is_some() || self.status.is_some() || self.description.is_some()
     }
 }
 
@@ -119,8 +110,6 @@ impl PatchApprovalPolicyDto {
 pub struct ApprovalPolicyResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     #[cfg_attr(feature = "openapi", schema(example = "example"))]
     pub name: String,
@@ -183,9 +172,9 @@ impl ApprovalPolicyListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalPolicySummaryDto {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     pub name: String,
+    pub status: ApprovalPolicyStatus,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -197,7 +186,6 @@ impl From<ApprovalPolicy> for ApprovalPolicyResponseDto {
     fn from(entity: ApprovalPolicy) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             resource_type: entity.resource_type,
             name: entity.name,
             status: entity.status,
@@ -212,9 +200,9 @@ impl From<ApprovalPolicy> for ApprovalPolicySummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             resource_type: entity.resource_type,
             name: entity.name,
+            status: entity.status,
             created_at,
         }
     }
@@ -224,7 +212,6 @@ impl From<CreateApprovalPolicyDto> for ApprovalPolicy {
     fn from(dto: CreateApprovalPolicyDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             resource_type: dto.resource_type,
             name: dto.name,
             status: dto.status,
@@ -238,7 +225,6 @@ impl From<&ApprovalPolicy> for ApprovalPolicyResponseDto {
     fn from(entity: &ApprovalPolicy) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             resource_type: entity.resource_type.clone(),
             name: entity.name.clone(),
             status: entity.status.clone(),
@@ -256,7 +242,6 @@ impl backbone_core::FromCreateDto<CreateApprovalPolicyDto> for ApprovalPolicy {
 
 impl backbone_core::ApplyUpdateDto<UpdateApprovalPolicyDto> for ApprovalPolicy {
     fn apply_update(mut self, dto: UpdateApprovalPolicyDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.resource_type = dto.resource_type;
         self.name = dto.name;
         self.status = dto.status;

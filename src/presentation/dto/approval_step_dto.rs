@@ -35,9 +35,6 @@ use crate::domain::entity::ApproverKind;
 #[serde(rename_all = "camelCase")]
 pub struct CreateApprovalStepDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "request_id")]
     pub request_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -74,9 +71,6 @@ pub struct CreateApprovalStepDto {
 #[cfg_attr(feature = "validation", derive(Validate))]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateApprovalStepDto {
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(alias = "company_id")]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(alias = "request_id")]
     pub request_id: Uuid,
@@ -115,9 +109,6 @@ pub struct UpdateApprovalStepDto {
 #[serde(rename_all = "camelCase")]
 pub struct PatchApprovalStepDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    #[serde(skip_serializing_if = "Option::is_none", alias = "company_id")]
-    pub company_id: Option<Uuid>,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     #[serde(skip_serializing_if = "Option::is_none", alias = "request_id")]
     pub request_id: Option<Uuid>,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -145,7 +136,7 @@ pub struct PatchApprovalStepDto {
 impl PatchApprovalStepDto {
     /// Check if any field is set
     pub fn has_changes(&self) -> bool {
-        self.company_id.is_some() || self.request_id.is_some() || self.step_no.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.assigned_to.is_some() || self.delegated_from.is_some() || self.status.is_some() || self.acted_at.is_some() || self.comment.is_some() || self.sla_due_at.is_some()
+        self.request_id.is_some() || self.step_no.is_some() || self.approver_kind.is_some() || self.approver_ref.is_some() || self.assigned_to.is_some() || self.delegated_from.is_some() || self.status.is_some() || self.acted_at.is_some() || self.comment.is_some() || self.sla_due_at.is_some()
     }
 }
 
@@ -163,8 +154,6 @@ impl PatchApprovalStepDto {
 pub struct ApprovalStepResponseDto {
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub id: Uuid,
-    #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
-    pub company_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = "550e8400-e29b-41d4-a716-446655440000"))]
     pub request_id: Uuid,
     #[cfg_attr(feature = "openapi", schema(example = 42))]
@@ -235,9 +224,9 @@ impl ApprovalStepListResponseDto {
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalStepSummaryDto {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub request_id: Uuid,
     pub step_no: i32,
+    pub approver_kind: ApproverKind,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -249,7 +238,6 @@ impl From<ApprovalStep> for ApprovalStepResponseDto {
     fn from(entity: ApprovalStep) -> Self {
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             request_id: entity.request_id,
             step_no: entity.step_no,
             approver_kind: entity.approver_kind,
@@ -270,9 +258,9 @@ impl From<ApprovalStep> for ApprovalStepSummaryDto {
         let created_at = backbone_core::PersistentEntity::created_at(&entity);
         Self {
             id: entity.id,
-            company_id: entity.company_id,
             request_id: entity.request_id,
             step_no: entity.step_no,
+            approver_kind: entity.approver_kind,
             created_at,
         }
     }
@@ -282,7 +270,6 @@ impl From<CreateApprovalStepDto> for ApprovalStep {
     fn from(dto: CreateApprovalStepDto) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id: dto.company_id,
             request_id: dto.request_id,
             step_no: dto.step_no,
             approver_kind: dto.approver_kind,
@@ -302,7 +289,6 @@ impl From<&ApprovalStep> for ApprovalStepResponseDto {
     fn from(entity: &ApprovalStep) -> Self {
         Self {
             id: entity.id.clone(),
-            company_id: entity.company_id.clone(),
             request_id: entity.request_id.clone(),
             step_no: entity.step_no.clone(),
             approver_kind: entity.approver_kind.clone(),
@@ -326,7 +312,6 @@ impl backbone_core::FromCreateDto<CreateApprovalStepDto> for ApprovalStep {
 
 impl backbone_core::ApplyUpdateDto<UpdateApprovalStepDto> for ApprovalStep {
     fn apply_update(mut self, dto: UpdateApprovalStepDto) -> backbone_core::ServiceResult<Self> {
-        self.company_id = dto.company_id;
         self.request_id = dto.request_id;
         self.step_no = dto.step_no;
         self.approver_kind = dto.approver_kind;

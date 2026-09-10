@@ -18,10 +18,14 @@
 //!   the authorization data the engine trusts, so they mount only behind a host's own
 //!   RBAC gate (typically an operator role).
 //!
-//! The tenant comes from the [`CompanyContext`] the `company_auth` middleware inserts —
-//! never from the body. Composers MUST mount this behind `company_auth` with the
-//! request-scoped DB binding (the strict-RLS posture): a cross-tenant id matches zero rows
-//! and surfaces as 404.
+//! Tenancy (ADR-0029): the module carries no tenancy of its own. `org_auth` verifies the
+//! Bearer token, resolves the session's org scope against the request's tenant tree, and
+//! runs every handler inside that scope — the engine's statements ride the transactions it
+//! relays that scope onto, and the composing service's tenancy decorator does the actual
+//! row-level fencing. The guard reads the tenant database from the `backbone_orm::PgPool`
+//! request extension, so this surface must be mounted inside the composing service's
+//! tenant router (the same wiring every org-guarded module requires). The acting principal
+//! comes from the [`OrgContext`] the `org_auth` middleware inserts — never from the body.
 
 use std::sync::Arc;
 
@@ -32,7 +36,7 @@ use axum::{
     routing::post,
     Json, Router,
 };
-use backbone_auth::company::CompanyContext;
+use backbone_auth::org::OrgContext;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -74,7 +78,6 @@ fn request_response(status: StatusCode, request: &ApprovalRequest) -> axum::resp
 #[serde(rename_all = "camelCase")]
 struct RequestBody {
     id: Uuid,
-    company_id: Uuid,
     resource_type: String,
     resource_id: Uuid,
     policy_id: Option<Uuid>,
@@ -92,7 +95,6 @@ impl From<&ApprovalRequest> for RequestBody {
     fn from(r: &ApprovalRequest) -> Self {
         Self {
             id: r.id,
-            company_id: r.company_id,
             resource_type: r.resource_type.to_string(),
             resource_id: r.resource_id,
             policy_id: r.policy_id,
@@ -109,7 +111,7 @@ impl From<&ApprovalRequest> for RequestBody {
 }
 
 /// The acting principal as a uuid actor stamp, when the token's `sub` parses as one.
-fn actor(t: &CompanyContext) -> Option<Uuid> {
+fn actor(t: &OrgContext) -> Option<Uuid> {
     Uuid::parse_str(&t.user_id).ok()
 }
 
@@ -125,7 +127,7 @@ struct DecideBody {
 async fn decide(
     State(svc): State<Arc<ApprovalsWriteService>>,
     Path(request_id): Path<Uuid>,
-    tenant: CompanyContext,
+    tenant: OrgContext,
     Json(body): Json<DecideBody>,
 ) -> axum::response::Response {
     let Some(employee_id) = actor(&tenant) else {
@@ -142,7 +144,6 @@ async fn decide(
             .into_response();
     }
     let decision = Decision {
-        company_id: tenant.company_id,
         request_id,
         step_no: body.step_no,
         actor: ApproverActor { employee_id },
@@ -162,15 +163,12 @@ async fn decide(
 async fn withdraw(
     State(svc): State<Arc<ApprovalsWriteService>>,
     Path(request_id): Path<Uuid>,
-    tenant: CompanyContext,
+    tenant: OrgContext,
 ) -> axum::response::Response {
     let Some(employee_id) = actor(&tenant) else {
         return err_response(ApprovalsError::NotRequester);
     };
-    match svc
-        .withdraw(tenant.company_id, request_id, employee_id)
-        .await
-    {
+    match svc.withdraw(request_id, employee_id).await {
         Ok(status) => (
             StatusCode::OK,
             Json(serde_json::json!({ "status": status.to_string() })),
@@ -183,9 +181,9 @@ async fn withdraw(
 async fn get_request(
     State(svc): State<Arc<ApprovalsWriteService>>,
     Path(request_id): Path<Uuid>,
-    tenant: CompanyContext,
+    tenant: OrgContext,
 ) -> axum::response::Response {
-    match svc.get_request(tenant.company_id, request_id).await {
+    match svc.get_request(request_id).await {
         Ok(r) => request_response(StatusCode::OK, &r),
         Err(e) => err_response(e),
     }
@@ -205,7 +203,7 @@ struct CreateDelegationBody {
 /// reach this handler). Delegation is consent; the principal cannot be forged.
 async fn create_delegation(
     State(svc): State<Arc<ApprovalsWriteService>>,
-    tenant: CompanyContext,
+    tenant: OrgContext,
     Json(body): Json<CreateDelegationBody>,
 ) -> axum::response::Response {
     let Some(approver) = actor(&tenant) else {
@@ -213,7 +211,6 @@ async fn create_delegation(
     };
     match svc
         .create_delegation(
-            tenant.company_id,
             approver,
             body.delegate_to,
             body.valid_from,
@@ -234,15 +231,12 @@ async fn create_delegation(
 async fn revoke_delegation(
     State(svc): State<Arc<ApprovalsWriteService>>,
     Path(delegation_id): Path<Uuid>,
-    tenant: CompanyContext,
+    tenant: OrgContext,
 ) -> axum::response::Response {
     let Some(approver) = actor(&tenant) else {
         return err_response(ApprovalsError::NotDelegationApprover);
     };
-    match svc
-        .revoke_delegation(tenant.company_id, delegation_id, approver)
-        .await
-    {
+    match svc.revoke_delegation(delegation_id, approver).await {
         Ok(()) => (
             StatusCode::OK,
             Json(serde_json::json!({"status": "revoked"})),
@@ -265,7 +259,7 @@ fn engine_verbs(svc: Arc<ApprovalsWriteService>) -> Router {
         .with_state(svc)
 }
 
-/// The guarded approvals surface — SAFE behind plain tenant auth (`company_auth`):
+/// The guarded approvals surface — SAFE behind the org session guard (`org_auth`):
 /// engine verbs, self-service delegation, and reads. It deliberately carries NO
 /// operator master data: policy and step-template rows are the authorization data
 /// the engine trusts at decide time, so their CRUD lives in

@@ -3,8 +3,9 @@
 //!
 //! The generated CRUD surface only moves rows; THIS service owns the semantics:
 //!
-//! - **file** — idempotent per resource: one LIVE request per `(company, resource_type,
-//!   resource_id)` (partial unique). A tenant with NO active policy for the resource gets a
+//! - **file** — idempotent per resource: one LIVE request per `(org_unit, resource_type,
+//!   resource_id)` — the partial unique is org-scoped and owned by the composing service's
+//!   tenancy decorator. A tenant with NO active policy for the resource gets a
 //!   PRE-APPROVED request with zero steps — control is opt-in via policy, so a policy-less
 //!   tenant behaves exactly as it did before the engine existed. A policy materializes the
 //!   chain: one step row per template member at its `step_no` (an all-of quorum is one row
@@ -29,9 +30,11 @@
 //! `pending` until its requester withdraws it; retries converge because `file` is
 //! idempotent per resource. `sla_due_at` is stamped but escalation is deferred.
 //!
-//! RLS discipline (ADR-0008/0014): every statement runs inside a `bind_company_on`
-//! transaction on the caller's connection and additionally carries its own `company_id`
-//! predicate — a cross-tenant id matches zero rows (404), never leakage.
+//! Tenancy (ADR-0029): the module carries no tenancy of its own — the composing service's
+//! tenancy decorator owns org scoping. Every statement runs inside a transaction that
+//! relays the caller's AMBIENT org scope (`org_scope::bind_org_scope_on`) when one is
+//! bound, so the decorator's row-level fence scopes each statement; a cross-tenant id
+//! matches zero rows (404), never leakage.
 
 use std::sync::Arc;
 
@@ -39,7 +42,7 @@ use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use backbone_orm::company_scope;
+use backbone_orm::org_scope;
 
 use crate::domain::entity::{
     ApprovalPriority, ApprovalRequest, ApprovalResourceType, ApprovalStatus, ApprovalStep,
@@ -50,7 +53,6 @@ use crate::infrastructure::persistence::ApprovalsWriteRepository;
 /// A filing a consumer's seam hands the engine.
 #[derive(Debug, Clone)]
 pub struct FileFiling {
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     pub resource_id: Uuid,
     pub requested_by: Uuid,
@@ -80,7 +82,6 @@ pub struct ApproverActor {
 /// One decision on one step.
 #[derive(Debug, Clone)]
 pub struct Decision {
-    pub company_id: Uuid,
     pub request_id: Uuid,
     pub step_no: i32,
     pub actor: ApproverActor,
@@ -96,6 +97,11 @@ pub struct Decision {
 /// engine silently picking. `role_holders` / `position_holders` return EVERY current
 /// holder — the engine materializes one member row per holder and the step is
 /// any-holder (the first approval completes it; see `decide`).
+///
+/// `company` is the legacy tenancy twin (ADR-0029): approvals itself is tenant-agnostic,
+/// but the host's org-structure lookups may still key on one. The engine sources it from
+/// the ambient org scope's legacy company id and fails closed when no scope is bound —
+/// it never guesses.
 ///
 /// The engine ships only [`FailClosedResolver`]: without a host-supplied resolver, any
 /// policy naming a dynamic kind fails the filing closed (422 `step_resolution_failed`)
@@ -161,6 +167,8 @@ pub enum ApprovalsError {
     MissingApproverRef,
     #[error("filing lost the concurrent-filing race too many times — retry")]
     FilingRaceExhausted,
+    #[error("no org scope bound: the composing service must resolve one for this request")]
+    NoCompanyScope,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -183,6 +191,7 @@ impl ApprovalsError {
             Self::InvalidChain(_) => "invalid_approval_chain",
             Self::MissingApproverRef => "missing_approver_ref",
             Self::FilingRaceExhausted => "filing_race_exhausted",
+            Self::NoCompanyScope => "no_org_scope",
             Self::Db(_) => "database_error",
         }
     }
@@ -199,7 +208,7 @@ impl ApprovalsError {
             | Self::SelfDelegationRefused
             | Self::DelegationWindowInvalid => 422,
             Self::FilingRaceExhausted => 503,
-            Self::Db(_) => 500,
+            Self::NoCompanyScope | Self::Db(_) => 500,
         }
     }
 }
@@ -237,6 +246,16 @@ impl ApprovalsWriteService {
         self
     }
 
+    /// The company id for the approver-resolution seam — the host's org-structure lookups
+    /// may still key on one during the tenancy transition. Sourced from the ambient org
+    /// scope the COMPOSING service binds; absent → fail-closed. The module never guesses
+    /// a company.
+    fn legacy_company_id() -> Result<Uuid, ApprovalsError> {
+        org_scope::current_org_scope()
+            .and_then(|s| s.legacy_company_id())
+            .ok_or(ApprovalsError::NoCompanyScope)
+    }
+
     /// File (or return the already-live) approval request for one resource. Idempotent;
     /// the concurrent-filing loser of the partial-unique race re-selects the winner's row.
     pub async fn file(&self, filing: FileFiling) -> Result<FilingOutcome, ApprovalsError> {
@@ -249,16 +268,18 @@ impl ApprovalsWriteService {
         // files a fresh one. Both outcomes are correct.
         for _ in 0..FILE_ATTEMPTS {
             let mut tx = self.pool.begin().await?;
-            company_scope::bind_company_on(&mut tx, filing.company_id).await?;
+            // Tenancy posture (ADR-0029): the module owns no scoping column — the composing
+            // service's tenancy decorator does. Relay the AMBIENT request scope onto this
+            // transaction when the caller bound one, so the decorator's org-unit fill (and
+            // any policy it installed) sees this transaction's inserts. An undecorated
+            // deployment has no ambient scope and skips this entirely.
+            if let Some(scope) = org_scope::current_org_scope() {
+                org_scope::bind_org_scope_on(&mut tx, &scope).await?;
+            }
 
             if let Some(existing) = self
                 .repo
-                .find_live_request(
-                    &mut tx,
-                    filing.company_id,
-                    &filing.resource_type,
-                    filing.resource_id,
-                )
+                .find_live_request(&mut tx, &filing.resource_type, filing.resource_id)
                 .await?
             {
                 tx.commit().await?;
@@ -274,12 +295,11 @@ impl ApprovalsWriteService {
             // enforcing a single active policy per resource is a host duty for now).
             let policy = self
                 .repo
-                .find_active_policy(&mut tx, filing.company_id, &filing.resource_type)
+                .find_active_policy(&mut tx, &filing.resource_type)
                 .await?;
 
             let request = ApprovalRequest {
                 id: Uuid::new_v4(),
-                company_id: filing.company_id,
                 resource_type: filing.resource_type,
                 resource_id: filing.resource_id,
                 policy_id: policy.as_ref().map(|p| p.id),
@@ -321,11 +341,10 @@ impl ApprovalsWriteService {
                     let members = self.resolve_members(template, filing.requested_by).await?;
                     for member in members {
                         let (assigned_to, delegated_from) = self
-                            .apply_delegation(&mut tx, filing.company_id, member.assigned_to)
+                            .apply_delegation(&mut tx, member.assigned_to)
                             .await?;
                         rows.push(ApprovalStep {
                             id: Uuid::new_v4(),
-                            company_id: filing.company_id,
                             request_id: request.id,
                             step_no: template.step_no,
                             approver_kind: member.approver_kind,
@@ -416,17 +435,19 @@ impl ApprovalsWriteService {
                 None => Err(ApprovalsError::MissingApproverRef),
             },
             ApproverKind::ManagerOfRequester => {
+                let company = Self::legacy_company_id()?;
                 let manager = self
                     .resolver
-                    .manager_of(template.company_id, requester)
+                    .manager_of(company, requester)
                     .await
                     .map_err(ApprovalsError::StepResolutionFailed)?;
                 Ok(one(ApproverKind::ManagerOfRequester, None, manager))
             }
             ApproverKind::DepartmentHead => {
+                let company = Self::legacy_company_id()?;
                 let head = self
                     .resolver
-                    .department_head_of(template.company_id, requester)
+                    .department_head_of(company, requester)
                     .await
                     .map_err(ApprovalsError::StepResolutionFailed)?;
                 Ok(one(ApproverKind::DepartmentHead, None, head))
@@ -435,9 +456,10 @@ impl ApprovalsWriteService {
                 let role = template
                     .approver_ref
                     .ok_or(ApprovalsError::MissingApproverRef)?;
+                let company = Self::legacy_company_id()?;
                 let holders = self
                     .resolver
-                    .role_holders(template.company_id, role)
+                    .role_holders(company, role)
                     .await
                     .map_err(ApprovalsError::StepResolutionFailed)?;
                 // Every holder becomes a member row, each stamped with the template's
@@ -456,9 +478,10 @@ impl ApprovalsWriteService {
                 let position = template
                     .approver_ref
                     .ok_or(ApprovalsError::MissingApproverRef)?;
+                let company = Self::legacy_company_id()?;
                 let holders = self
                     .resolver
-                    .position_holders(template.company_id, position)
+                    .position_holders(company, position)
                     .await
                     .map_err(ApprovalsError::StepResolutionFailed)?;
                 Ok(holders
@@ -533,13 +556,9 @@ impl ApprovalsWriteService {
     async fn apply_delegation(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         approver: Uuid,
     ) -> Result<(Uuid, Option<Uuid>), ApprovalsError> {
-        let delegation = self
-            .repo
-            .find_active_delegation_for(conn, company, approver)
-            .await?;
+        let delegation = self.repo.find_active_delegation_for(conn, approver).await?;
         Ok(match delegation {
             Some(delegate) => (delegate, Some(approver)),
             None => (approver, None),
@@ -550,11 +569,15 @@ impl ApprovalsWriteService {
     pub async fn decide(&self, decision: Decision) -> Result<ApprovalStatus, ApprovalsError> {
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, decision.company_id).await?;
+        // Tenancy posture (ADR-0029) — see `file`: relay the AMBIENT request scope when
+        // the caller bound one; the decorator's fence scopes every statement below.
+        if let Some(scope) = org_scope::current_org_scope() {
+            org_scope::bind_org_scope_on(&mut tx, &scope).await?;
+        }
 
         let request = self
             .repo
-            .get_request(&mut tx, decision.company_id, decision.request_id)
+            .get_request(&mut tx, decision.request_id)
             .await?
             .ok_or(ApprovalsError::NotFound)?;
         if request.status != ApprovalStatus::Pending {
@@ -566,12 +589,7 @@ impl ApprovalsWriteService {
 
         let steps = self
             .repo
-            .live_steps_at(
-                &mut tx,
-                decision.company_id,
-                decision.request_id,
-                decision.step_no,
-            )
+            .live_steps_at(&mut tx, decision.request_id, decision.step_no)
             .await?;
         if steps.is_empty() {
             return Err(ApprovalsError::NoSuchStep);
@@ -582,7 +600,7 @@ impl ApprovalsWriteService {
         let mut authorized: Vec<&ApprovalStep> = Vec::new();
         for step in &steps {
             if self
-                .actor_may_decide(&mut tx, decision.company_id, step, &decision.actor)
+                .actor_may_decide(&mut tx, step, &decision.actor)
                 .await?
             {
                 authorized.push(step);
@@ -618,7 +636,6 @@ impl ApprovalsWriteService {
                 .repo
                 .mark_step_decided(
                     &mut tx,
-                    decision.company_id,
                     step.id,
                     ApprovalStepStatus::Rejected,
                     decision.comment.as_deref(),
@@ -633,7 +650,7 @@ impl ApprovalsWriteService {
                 // report how the request converged.
                 let status = self
                     .repo
-                    .get_request(&mut tx, decision.company_id, decision.request_id)
+                    .get_request(&mut tx, decision.request_id)
                     .await?
                     .map(|r| r.status)
                     .unwrap_or(request.status);
@@ -641,19 +658,12 @@ impl ApprovalsWriteService {
                 return Ok(status);
             }
             self.repo
-                .skip_other_pending_steps(
-                    &mut tx,
-                    decision.company_id,
-                    decision.request_id,
-                    Some(step.id),
-                    now,
-                )
+                .skip_other_pending_steps(&mut tx, decision.request_id, Some(step.id), now)
                 .await?;
             let final_status = match self
                 .repo
                 .finish_request(
                     &mut tx,
-                    decision.company_id,
                     decision.request_id,
                     ApprovalStatus::Rejected,
                     Some(decision.actor.employee_id),
@@ -665,7 +675,7 @@ impl ApprovalsWriteService {
                 // A concurrent decider finished first — report how it landed.
                 None => self
                     .repo
-                    .get_request(&mut tx, decision.company_id, decision.request_id)
+                    .get_request(&mut tx, decision.request_id)
                     .await?
                     .map(|r| r.status)
                     .unwrap_or(ApprovalStatus::Rejected),
@@ -678,7 +688,6 @@ impl ApprovalsWriteService {
             .repo
             .mark_step_decided(
                 &mut tx,
-                decision.company_id,
                 step.id,
                 ApprovalStepStatus::Approved,
                 decision.comment.as_deref(),
@@ -692,7 +701,7 @@ impl ApprovalsWriteService {
             // records what happened; this decision writes nothing on top.
             let status = self
                 .repo
-                .get_request(&mut tx, decision.company_id, decision.request_id)
+                .get_request(&mut tx, decision.request_id)
                 .await?
                 .map(|r| r.status)
                 .unwrap_or(request.status);
@@ -712,7 +721,6 @@ impl ApprovalsWriteService {
             self.repo
                 .skip_sibling_pending_steps(
                     &mut tx,
-                    decision.company_id,
                     decision.request_id,
                     decision.step_no,
                     step.approver_kind,
@@ -728,24 +736,18 @@ impl ApprovalsWriteService {
         // countdown reaches zero on the first holder's approval.
         let remaining = self
             .repo
-            .count_pending_steps_at(
-                &mut tx,
-                decision.company_id,
-                decision.request_id,
-                decision.step_no,
-            )
+            .count_pending_steps_at(&mut tx, decision.request_id, decision.step_no)
             .await?;
         let status = if remaining == 0 {
             // Last step? finish approved; otherwise advance the chain.
             let max_step = self
                 .repo
-                .max_step_no(&mut tx, decision.company_id, decision.request_id)
+                .max_step_no(&mut tx, decision.request_id)
                 .await?;
             let landed = if decision.step_no >= max_step {
                 self.repo
                     .finish_request(
                         &mut tx,
-                        decision.company_id,
                         decision.request_id,
                         ApprovalStatus::Approved,
                         Some(decision.actor.employee_id),
@@ -756,7 +758,6 @@ impl ApprovalsWriteService {
                 self.repo
                     .set_current_step(
                         &mut tx,
-                        decision.company_id,
                         decision.request_id,
                         decision.step_no + 1,
                         now,
@@ -777,7 +778,6 @@ impl ApprovalsWriteService {
     async fn actor_may_decide(
         &self,
         conn: &mut sqlx::PgConnection,
-        company: Uuid,
         step: &ApprovalStep,
         actor: &ApproverActor,
     ) -> Result<bool, ApprovalsError> {
@@ -788,7 +788,7 @@ impl ApprovalsWriteService {
         // and the row records the inherited authority.
         if self
             .repo
-            .delegation_exists_for(conn, company, step.assigned_to, actor.employee_id)
+            .delegation_exists_for(conn, step.assigned_to, actor.employee_id)
             .await?
         {
             return Ok(true);
@@ -798,16 +798,15 @@ impl ApprovalsWriteService {
 
     /// The engine verdict for one request (consumer seams translate this into their own
     /// Verdict enums). Cross-tenant ids are 404s, never leakage.
-    pub async fn status(
-        &self,
-        company: Uuid,
-        request_id: Uuid,
-    ) -> Result<ApprovalStatus, ApprovalsError> {
+    pub async fn status(&self, request_id: Uuid) -> Result<ApprovalStatus, ApprovalsError> {
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company).await?;
+        // Tenancy posture (ADR-0029) — see `file`.
+        if let Some(scope) = org_scope::current_org_scope() {
+            org_scope::bind_org_scope_on(&mut tx, &scope).await?;
+        }
         let request = self
             .repo
-            .get_request(&mut tx, company, request_id)
+            .get_request(&mut tx, request_id)
             .await?
             .ok_or(ApprovalsError::NotFound)?;
         tx.commit().await?;
@@ -815,16 +814,15 @@ impl ApprovalsWriteService {
     }
 
     /// The full request row (the guarded read surface uses this).
-    pub async fn get_request(
-        &self,
-        company: Uuid,
-        request_id: Uuid,
-    ) -> Result<ApprovalRequest, ApprovalsError> {
+    pub async fn get_request(&self, request_id: Uuid) -> Result<ApprovalRequest, ApprovalsError> {
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company).await?;
+        // Tenancy posture (ADR-0029) — see `file`.
+        if let Some(scope) = org_scope::current_org_scope() {
+            org_scope::bind_org_scope_on(&mut tx, &scope).await?;
+        }
         let request = self
             .repo
-            .get_request(&mut tx, company, request_id)
+            .get_request(&mut tx, request_id)
             .await?
             .ok_or(ApprovalsError::NotFound)?;
         tx.commit().await?;
@@ -835,17 +833,19 @@ impl ApprovalsWriteService {
     /// per-resource unique so a re-submit files a fresh chain.
     pub async fn withdraw(
         &self,
-        company: Uuid,
         request_id: Uuid,
         actor: Uuid,
     ) -> Result<ApprovalStatus, ApprovalsError> {
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company).await?;
+        // Tenancy posture (ADR-0029) — see `file`.
+        if let Some(scope) = org_scope::current_org_scope() {
+            org_scope::bind_org_scope_on(&mut tx, &scope).await?;
+        }
 
         let request = self
             .repo
-            .get_request(&mut tx, company, request_id)
+            .get_request(&mut tx, request_id)
             .await?
             .ok_or(ApprovalsError::NotFound)?;
         if request.requested_by != actor {
@@ -856,11 +856,11 @@ impl ApprovalsWriteService {
         }
 
         self.repo
-            .skip_other_pending_steps(&mut tx, company, request_id, None, now)
+            .skip_other_pending_steps(&mut tx, request_id, None, now)
             .await?;
         let status = self
             .repo
-            .withdraw_request(&mut tx, company, request_id, now)
+            .withdraw_request(&mut tx, request_id, now)
             .await?
             .unwrap_or(ApprovalStatus::Withdrawn);
         tx.commit().await?;
@@ -875,7 +875,6 @@ impl ApprovalsWriteService {
     /// but does not re-route rows a filing already resolved.
     pub async fn create_delegation(
         &self,
-        company: Uuid,
         approver: Uuid,
         delegate_to: Uuid,
         valid_from: chrono::NaiveDate,
@@ -890,18 +889,12 @@ impl ApprovalsWriteService {
         }
         let id = Uuid::new_v4();
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company).await?;
+        // Tenancy posture (ADR-0029) — see `file`.
+        if let Some(scope) = org_scope::current_org_scope() {
+            org_scope::bind_org_scope_on(&mut tx, &scope).await?;
+        }
         self.repo
-            .insert_delegation(
-                &mut tx,
-                company,
-                id,
-                approver,
-                delegate_to,
-                valid_from,
-                valid_to,
-                reason,
-            )
+            .insert_delegation(&mut tx, id, approver, delegate_to, valid_from, valid_to, reason)
             .await?;
         tx.commit().await?;
         Ok(id)
@@ -913,23 +906,25 @@ impl ApprovalsWriteService {
     /// authorizing decide-time delegation checks immediately.
     pub async fn revoke_delegation(
         &self,
-        company: Uuid,
         delegation_id: Uuid,
         approver: Uuid,
     ) -> Result<(), ApprovalsError> {
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
-        company_scope::bind_company_on(&mut tx, company).await?;
+        // Tenancy posture (ADR-0029) — see `file`.
+        if let Some(scope) = org_scope::current_org_scope() {
+            org_scope::bind_org_scope_on(&mut tx, &scope).await?;
+        }
         let delegation = self
             .repo
-            .get_delegation(&mut tx, company, delegation_id)
+            .get_delegation(&mut tx, delegation_id)
             .await?
             .ok_or(ApprovalsError::NotFound)?;
         if delegation.approver_id != approver {
             return Err(ApprovalsError::NotDelegationApprover);
         }
         self.repo
-            .revoke_delegation(&mut tx, company, delegation_id, approver, now)
+            .revoke_delegation(&mut tx, delegation_id, approver, now)
             .await?
             .ok_or(ApprovalsError::DelegationNotActive)?;
         tx.commit().await?;

@@ -52,7 +52,6 @@ impl std::ops::Deref for ApprovalRequestId {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct ApprovalRequest {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub resource_type: ApprovalResourceType,
     pub resource_id: Uuid,
     pub policy_id: Option<Uuid>,
@@ -76,10 +75,9 @@ impl ApprovalRequest {
     }
 
     /// Create a new ApprovalRequest with required fields
-    pub fn new(company_id: Uuid, resource_type: ApprovalResourceType, resource_id: Uuid, requested_by: Uuid, status: ApprovalStatus, priority: ApprovalPriority) -> Self {
+    pub fn new(resource_type: ApprovalResourceType, resource_id: Uuid, requested_by: Uuid, status: ApprovalStatus, priority: ApprovalPriority) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id,
             resource_type,
             resource_id,
             policy_id: None,
@@ -199,9 +197,6 @@ impl ApprovalRequest {
     pub fn apply_patch(&mut self, fields: std::collections::HashMap<String, serde_json::Value>) {
         for (key, value) in fields {
             match key.as_str() {
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
-                }
                 "resource_type" => {
                     if let Ok(v) = serde_json::from_value(value) { self.resource_type = v; }
                 }
@@ -289,7 +284,6 @@ impl backbone_orm::EntityRepoMeta for ApprovalRequest {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("resource_id".to_string(), "uuid".to_string());
         m.insert("policy_id".to_string(), "uuid".to_string());
         m.insert("resource_type".to_string(), "approval_resource_type".to_string());
@@ -300,9 +294,6 @@ impl backbone_orm::EntityRepoMeta for ApprovalRequest {
     fn search_fields() -> &'static [&'static str] {
         &[]
     }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
-    }
 }
 
 /// Builder for ApprovalRequest entity
@@ -311,7 +302,6 @@ impl backbone_orm::EntityRepoMeta for ApprovalRequest {
 /// System fields (id, metadata, timestamps) are auto-initialized.
 #[derive(Debug, Clone, Default)]
 pub struct ApprovalRequestBuilder {
-    company_id: Option<Uuid>,
     resource_type: Option<ApprovalResourceType>,
     resource_id: Option<Uuid>,
     policy_id: Option<Uuid>,
@@ -326,12 +316,6 @@ pub struct ApprovalRequestBuilder {
 }
 
 impl ApprovalRequestBuilder {
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
-
     /// Set the resource_type field (required)
     pub fn resource_type(mut self, value: ApprovalResourceType) -> Self {
         self.resource_type = Some(value);
@@ -402,14 +386,12 @@ impl ApprovalRequestBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<ApprovalRequest, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let resource_type = self.resource_type.ok_or_else(|| "resource_type is required".to_string())?;
         let resource_id = self.resource_id.ok_or_else(|| "resource_id is required".to_string())?;
         let requested_by = self.requested_by.ok_or_else(|| "requested_by is required".to_string())?;
 
         Ok(ApprovalRequest {
             id: Uuid::new_v4(),
-            company_id,
             resource_type,
             resource_id,
             policy_id: self.policy_id,

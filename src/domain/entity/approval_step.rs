@@ -51,7 +51,6 @@ impl std::ops::Deref for ApprovalStepId {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct ApprovalStep {
     pub id: Uuid,
-    pub company_id: Uuid,
     pub request_id: Uuid,
     pub step_no: i32,
     pub approver_kind: ApproverKind,
@@ -74,10 +73,9 @@ impl ApprovalStep {
     }
 
     /// Create a new ApprovalStep with required fields
-    pub fn new(company_id: Uuid, request_id: Uuid, step_no: i32, approver_kind: ApproverKind, assigned_to: Uuid, status: ApprovalStepStatus) -> Self {
+    pub fn new(request_id: Uuid, step_no: i32, approver_kind: ApproverKind, assigned_to: Uuid, status: ApprovalStepStatus) -> Self {
         Self {
             id: Uuid::new_v4(),
-            company_id,
             request_id,
             step_no,
             approver_kind,
@@ -190,9 +188,6 @@ impl ApprovalStep {
     pub fn apply_patch(&mut self, fields: std::collections::HashMap<String, serde_json::Value>) {
         for (key, value) in fields {
             match key.as_str() {
-                "company_id" => {
-                    if let Ok(v) = serde_json::from_value(value) { self.company_id = v; }
-                }
                 "request_id" => {
                     if let Ok(v) = serde_json::from_value(value) { self.request_id = v; }
                 }
@@ -277,7 +272,6 @@ impl backbone_orm::EntityRepoMeta for ApprovalStep {
     fn column_types() -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("id".to_string(), "uuid".to_string());
-        m.insert("company_id".to_string(), "uuid".to_string());
         m.insert("request_id".to_string(), "uuid".to_string());
         m.insert("approver_kind".to_string(), "approver_kind".to_string());
         m.insert("status".to_string(), "approval_step_status".to_string());
@@ -285,9 +279,6 @@ impl backbone_orm::EntityRepoMeta for ApprovalStep {
     }
     fn search_fields() -> &'static [&'static str] {
         &[]
-    }
-    fn company_field() -> Option<&'static str> {
-        Some("company_id")
     }
 }
 
@@ -297,7 +288,6 @@ impl backbone_orm::EntityRepoMeta for ApprovalStep {
 /// System fields (id, metadata, timestamps) are auto-initialized.
 #[derive(Debug, Clone, Default)]
 pub struct ApprovalStepBuilder {
-    company_id: Option<Uuid>,
     request_id: Option<Uuid>,
     step_no: Option<i32>,
     approver_kind: Option<ApproverKind>,
@@ -311,12 +301,6 @@ pub struct ApprovalStepBuilder {
 }
 
 impl ApprovalStepBuilder {
-    /// Set the company_id field (required)
-    pub fn company_id(mut self, value: Uuid) -> Self {
-        self.company_id = Some(value);
-        self
-    }
-
     /// Set the request_id field (required)
     pub fn request_id(mut self, value: Uuid) -> Self {
         self.request_id = Some(value);
@@ -381,7 +365,6 @@ impl ApprovalStepBuilder {
     ///
     /// Returns Err if any required field without a default is missing.
     pub fn build(self) -> Result<ApprovalStep, String> {
-        let company_id = self.company_id.ok_or_else(|| "company_id is required".to_string())?;
         let request_id = self.request_id.ok_or_else(|| "request_id is required".to_string())?;
         let step_no = self.step_no.ok_or_else(|| "step_no is required".to_string())?;
         let approver_kind = self.approver_kind.ok_or_else(|| "approver_kind is required".to_string())?;
@@ -389,7 +372,6 @@ impl ApprovalStepBuilder {
 
         Ok(ApprovalStep {
             id: Uuid::new_v4(),
-            company_id,
             request_id,
             step_no,
             approver_kind,

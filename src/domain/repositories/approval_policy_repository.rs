@@ -7,7 +7,6 @@
 
 use async_trait::async_trait;
 use anyhow::Result;
-use uuid::Uuid;
 
 use crate::domain::entity::{ApprovalPolicy, ApprovalPolicyStatus, ApprovalResourceType};
 
@@ -44,7 +43,6 @@ pub struct ApprovalPolicyPaginatedResult {
 /// Filter parameters for list queries
 #[derive(Debug, Clone, Default)]
 pub struct ApprovalPolicyFilter {
-    pub company_id: Option<Uuid>,
     pub resource_type: Option<ApprovalResourceType>,
     pub name: Option<String>,
     pub status: Option<ApprovalPolicyStatus>,
@@ -54,7 +52,7 @@ pub struct ApprovalPolicyFilter {
 impl ApprovalPolicyFilter {
     /// Check if any filter is set
     pub fn has_filters(&self) -> bool {
-        self.company_id.is_some() || self.resource_type.is_some() || self.name.is_some() || self.status.is_some() || self.description.is_some()
+        self.resource_type.is_some() || self.name.is_some() || self.status.is_some() || self.description.is_some()
     }
 }
 

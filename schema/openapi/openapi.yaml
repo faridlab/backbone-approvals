@@ -1859,16 +1859,12 @@ components:
       type: object
       required:
         - id
-        - company_id
         - resource_type
         - name
         - status
         - metadata
       properties:
         id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         resource_type:
@@ -1899,15 +1895,11 @@ components:
     CreateApprovalPolicyRequest:
       type: object
       required:
-        - company_id
         - resource_type
         - name
         - status
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         resource_type:
           type: string
         name:
@@ -1923,15 +1915,11 @@ components:
     UpdateApprovalPolicyRequest:
       type: object
       required:
-        - company_id
         - resource_type
         - name
         - status
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         resource_type:
           type: string
         name:
@@ -1947,9 +1935,6 @@ components:
     PatchApprovalPolicyRequest:
       type: object
       properties:
-        company_id:
-          type: string
-          format: uuid
         resource_type:
           type: string
         name:
@@ -1976,7 +1961,6 @@ components:
       type: object
       required:
         - id
-        - company_id
         - resource_type
         - resource_id
         - requested_by
@@ -1985,9 +1969,6 @@ components:
         - metadata
       properties:
         id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         resource_type:
@@ -2044,7 +2025,6 @@ components:
     CreateApprovalRequestRequest:
       type: object
       required:
-        - company_id
         - resource_type
         - resource_id
         - requested_by
@@ -2052,9 +2032,6 @@ components:
         - priority
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         resource_type:
           type: string
         resource_id:
@@ -2096,7 +2073,6 @@ components:
     UpdateApprovalRequestRequest:
       type: object
       required:
-        - company_id
         - resource_type
         - resource_id
         - requested_by
@@ -2104,9 +2080,6 @@ components:
         - priority
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         resource_type:
           type: string
         resource_id:
@@ -2148,9 +2121,6 @@ components:
     PatchApprovalRequestRequest:
       type: object
       properties:
-        company_id:
-          type: string
-          format: uuid
         resource_type:
           type: string
         resource_id:
@@ -2203,7 +2173,6 @@ components:
       type: object
       required:
         - id
-        - company_id
         - request_id
         - step_no
         - approver_kind
@@ -2212,9 +2181,6 @@ components:
         - metadata
       properties:
         id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         request_id:
@@ -2268,7 +2234,6 @@ components:
     CreateApprovalStepRequest:
       type: object
       required:
-        - company_id
         - request_id
         - step_no
         - approver_kind
@@ -2276,9 +2241,6 @@ components:
         - status
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         request_id:
           type: string
           format: uuid
@@ -2317,7 +2279,6 @@ components:
     UpdateApprovalStepRequest:
       type: object
       required:
-        - company_id
         - request_id
         - step_no
         - approver_kind
@@ -2325,9 +2286,6 @@ components:
         - status
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         request_id:
           type: string
           format: uuid
@@ -2366,9 +2324,6 @@ components:
     PatchApprovalStepRequest:
       type: object
       properties:
-        company_id:
-          type: string
-          format: uuid
         request_id:
           type: string
           format: uuid
@@ -2418,16 +2373,12 @@ components:
       type: object
       required:
         - id
-        - company_id
         - policy_id
         - step_no
         - approver_kind
         - metadata
       properties:
         id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         policy_id:
@@ -2468,15 +2419,11 @@ components:
     CreateApprovalStepTemplateRequest:
       type: object
       required:
-        - company_id
         - policy_id
         - step_no
         - approver_kind
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         policy_id:
           type: string
           format: uuid
@@ -2502,15 +2449,11 @@ components:
     UpdateApprovalStepTemplateRequest:
       type: object
       required:
-        - company_id
         - policy_id
         - step_no
         - approver_kind
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         policy_id:
           type: string
           format: uuid
@@ -2536,9 +2479,6 @@ components:
     PatchApprovalStepTemplateRequest:
       type: object
       properties:
-        company_id:
-          type: string
-          format: uuid
         policy_id:
           type: string
           format: uuid
@@ -2575,7 +2515,6 @@ components:
       type: object
       required:
         - id
-        - company_id
         - approver_id
         - delegate_to_id
         - valid_from
@@ -2584,9 +2523,6 @@ components:
         - metadata
       properties:
         id:
-          type: string
-          format: uuid
-        company_id:
           type: string
           format: uuid
         approver_id:
@@ -2625,7 +2561,6 @@ components:
     CreateDelegationRequest:
       type: object
       required:
-        - company_id
         - approver_id
         - delegate_to_id
         - valid_from
@@ -2633,9 +2568,6 @@ components:
         - status
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         approver_id:
           type: string
           format: uuid
@@ -2659,7 +2591,6 @@ components:
     UpdateDelegationRequest:
       type: object
       required:
-        - company_id
         - approver_id
         - delegate_to_id
         - valid_from
@@ -2667,9 +2598,6 @@ components:
         - status
         - metadata
       properties:
-        company_id:
-          type: string
-          format: uuid
         approver_id:
           type: string
           format: uuid
@@ -2693,9 +2621,6 @@ components:
     PatchDelegationRequest:
       type: object
       properties:
-        company_id:
-          type: string
-          format: uuid
         approver_id:
           type: string
           format: uuid
