@@ -1559,3 +1559,127 @@ async fn quorum_sharing_one_delegate_fails_at_file() {
     .unwrap();
     assert_eq!(n, 0);
 }
+
+// ─── approval hygiene: the two-eyes rule and the SLA consequence ──────────────
+
+/// A template with an explicit SLA clock (the shared `seed_template` leaves it NULL).
+async fn seed_template_sla(
+    pool: &PgPool,
+    policy: Uuid,
+    step_no: i32,
+    approver_kind: &str,
+    approver_ref: Option<Uuid>,
+    sla_hours: i32,
+) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"INSERT INTO approvals.approval_step_templates
+               (id, policy_id, step_no, approver_kind, approver_ref, sla_hours, all_of, metadata)
+           VALUES ($1, $2, $3, $4::approver_kind, $5, $6, NULL, '{}'::jsonb)"#,
+    )
+    .bind(id)
+    .bind(policy)
+    .bind(step_no)
+    .bind(approver_kind)
+    .bind(approver_ref)
+    .bind(sla_hours)
+    .execute(pool)
+    .await
+    .unwrap();
+    id
+}
+
+#[tokio::test]
+async fn self_approval_is_refused() {
+    let (_sequential, pool) = pool().await;
+    let requester = Uuid::new_v4();
+    let policy = seed_policy(&pool, "leave").await;
+    // A policy defect: the requester named as their own approver. The engine must
+    // say so instead of lending the request a signature.
+    seed_template(&pool, policy, 1, "specific_employee", Some(requester), None).await;
+    let svc = ApprovalsWriteService::new(pool.clone());
+    let outcome = scoped(&pool, svc.file(filing(Uuid::new_v4(), requester)))
+        .await
+        .unwrap();
+    assert_eq!(outcome.verdict, ApprovalStatus::Pending);
+
+    let err = scoped(&pool, svc.decide(decide_as(outcome.request_id, 1, requester, true)))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "self_approval_forbidden", "the requester deciding their own request");
+    assert_eq!(err.http_status(), 403);
+
+    // Anyone else is still just not the assignee — a distinct refusal, so the
+    // rule is diagnosable rather than a blanket 403.
+    let err = scoped(&pool, svc.decide(decide_as(outcome.request_id, 1, Uuid::new_v4(), true)))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "not_step_approver", "a bystander is refused as a bystander");
+}
+
+#[tokio::test]
+async fn overdue_step_escalates_to_department_head() {
+    let (_sequential, pool) = pool().await;
+    let requester = Uuid::new_v4();
+    let assignee = Uuid::new_v4();
+    let head = Uuid::new_v4();
+    let policy = seed_policy(&pool, "leave").await;
+    // sla_hours = 0: the clock expires the moment the filing stamps it.
+    seed_template_sla(&pool, policy, 1, "specific_employee", Some(assignee), 0).await;
+    let svc = ApprovalsWriteService::new(pool.clone()).with_resolver(Arc::new(
+        MapResolver::new(Uuid::new_v4(), head),
+    ));
+    let outcome = scoped(&pool, svc.file(filing(Uuid::new_v4(), requester)))
+        .await
+        .unwrap();
+
+    // Inside the clock: not overdue yet is a state refusal, not an escalation.
+    sqlx::query(
+        "UPDATE approvals.approval_steps SET sla_due_at = now() + interval '1 hour'          WHERE request_id = $1 AND step_no = 1",
+    )
+    .bind(outcome.request_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let err = scoped(&pool, svc.escalate_overdue_step(outcome.request_id, 1))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "step_not_overdue", "a step inside its SLA does not escalate");
+
+    // Past the clock: the step moves to the department head, verdict still unmade.
+    sqlx::query(
+        "UPDATE approvals.approval_steps SET sla_due_at = now() - interval '1 minute'          WHERE request_id = $1 AND step_no = 1",
+    )
+    .bind(outcome.request_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let esc = scoped(&pool, svc.escalate_overdue_step(outcome.request_id, 1))
+        .await
+        .unwrap();
+    assert_eq!(esc.escalated_from, assignee, "escalation names who sat on it");
+    assert_eq!(esc.assigned_to, head, "the department head takes the step");
+    let (assignee_now, reason): (Uuid, String) = sqlx::query_as(
+        "SELECT assigned_to, metadata->>'escalation_reason'          FROM approvals.approval_steps WHERE request_id = $1 AND step_no = 1",
+    )
+    .bind(outcome.request_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(assignee_now, head, "the row itself moved");
+    assert_eq!(reason, "sla_breach", "the trace is stamped where it happened");
+    let status: String = sqlx::query_scalar(
+        "SELECT status::text FROM approvals.approval_requests WHERE id = $1",
+    )
+    .bind(outcome.request_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "pending", "escalation moves the question, it does not answer it");
+
+    // Escalating again: the head IS the assignee now — a typed failure, never a loop.
+    let err = scoped(&pool, svc.escalate_overdue_step(outcome.request_id, 1))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "step_resolution_failed", "no self-referential escalation");
+}

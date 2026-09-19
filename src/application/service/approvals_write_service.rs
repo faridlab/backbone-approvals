@@ -79,6 +79,17 @@ pub struct ApproverActor {
     pub employee_id: Uuid,
 }
 
+/// The outcome of one escalation: the request is untouched (still pending, same
+/// step), the step now answers to someone else.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EscalatedStep {
+    pub request_id: uuid::Uuid,
+    pub step_no: i32,
+    pub escalated_from: uuid::Uuid,
+    pub assigned_to: uuid::Uuid,
+}
+
 /// One decision on one step.
 #[derive(Debug, Clone)]
 pub struct Decision {
@@ -151,6 +162,12 @@ pub enum ApprovalsError {
     NotRequester,
     #[error("an approver cannot delegate to themselves")]
     SelfDelegationRefused,
+    /// The two-eyes rule: the requester never decides their own request.
+    #[error("the requester may not decide their own request")]
+    SelfApprovalForbidden,
+    /// Escalation is a consequence of breach — a step inside its SLA has nothing to escalate.
+    #[error("the step's SLA has not breached")]
+    StepNotOverdue,
     #[error("the delegation window is invalid (valid_to before valid_from)")]
     DelegationWindowInvalid,
     #[error("only the delegating approver may manage this delegation")]
@@ -183,6 +200,8 @@ impl ApprovalsError {
             Self::NotStepApprover => "not_step_approver",
             Self::NotRequester => "not_requester",
             Self::SelfDelegationRefused => "self_delegation_refused",
+            Self::SelfApprovalForbidden => "self_approval_forbidden",
+            Self::StepNotOverdue => "step_not_overdue",
             Self::DelegationWindowInvalid => "delegation_window_invalid",
             Self::NotDelegationApprover => "not_delegation_approver",
             Self::DelegationNotActive => "delegation_not_active",
@@ -199,8 +218,10 @@ impl ApprovalsError {
     pub fn http_status(&self) -> u16 {
         match self {
             Self::NotFound | Self::NoSuchStep => 404,
-            Self::NotStepApprover | Self::NotRequester | Self::NotDelegationApprover => 403,
-            Self::NotPending | Self::OutOfTurn | Self::DelegationNotActive => 409,
+            Self::NotStepApprover | Self::NotRequester | Self::NotDelegationApprover
+            | Self::SelfApprovalForbidden => 403,
+            Self::NotPending | Self::OutOfTurn | Self::DelegationNotActive
+            | Self::StepNotOverdue => 409,
             Self::StepResolutionFailed(_)
             | Self::InvalidQuorum
             | Self::MissingApproverRef
@@ -583,6 +604,13 @@ impl ApprovalsWriteService {
         if request.status != ApprovalStatus::Pending {
             return Err(ApprovalsError::NotPending);
         }
+        // The two-eyes rule: whoever asked may not also answer. This holds before the
+        // turn check and before assignee authorization — a policy that names the
+        // requester as their own approver is a policy defect, and the engine says so
+        // rather than lending it a signature.
+        if decision.actor.employee_id == request.requested_by {
+            return Err(ApprovalsError::SelfApprovalForbidden);
+        }
         if request.current_step != Some(decision.step_no) {
             return Err(ApprovalsError::OutOfTurn);
         }
@@ -831,6 +859,80 @@ impl ApprovalsWriteService {
 
     /// Requester-only withdraw: the pending chain is withdrawn AND soft-deleted, freeing the
     /// per-resource unique so a re-submit files a fresh chain.
+    /// The SLA consequence: reassign a breached pending step to the requester's
+    /// department head, resolved live against the same org chart that resolved the
+    /// original assignee. The verdict itself is NOT made — escalation moves the
+    /// question up the chain, it does not answer it (auto-approve on breach would
+    /// forge the two-eyes rule the decide path enforces). Only the CURRENT step,
+    /// only while pending, only past `sla_due_at`; a step with no SLA clock has
+    /// nothing to breach. Idempotent target: if the department head IS the current
+    /// assignee there is nobody senior to hand it to — a typed failure, never a
+    /// silent no-op or a self-referential loop.
+    pub async fn escalate_overdue_step(
+        &self,
+        request_id: uuid::Uuid,
+        step_no: i32,
+    ) -> Result<EscalatedStep, ApprovalsError> {
+        let now = chrono::Utc::now();
+        let mut tx = self.pool.begin().await?;
+        if let Some(scope) = org_scope::current_org_scope() {
+            org_scope::bind_org_scope_on(&mut tx, &scope).await?;
+        }
+
+        let request = self
+            .repo
+            .get_request(&mut tx, request_id)
+            .await?
+            .ok_or(ApprovalsError::NotFound)?;
+        if request.status != ApprovalStatus::Pending {
+            return Err(ApprovalsError::NotPending);
+        }
+        if request.current_step != Some(step_no) {
+            return Err(ApprovalsError::OutOfTurn);
+        }
+        let steps = self.repo.live_steps_at(&mut tx, request_id, step_no).await?;
+        let step = steps
+            .iter()
+            .find(|s| s.status == ApprovalStepStatus::Pending)
+            .ok_or(ApprovalsError::NoSuchStep)?;
+        let due = step.sla_due_at.ok_or(ApprovalsError::StepNotOverdue)?;
+        if due >= now {
+            return Err(ApprovalsError::StepNotOverdue);
+        }
+
+        // The resolver resolves against the same leg the filing used — the ambient
+        // scope's legacy company (the module is tenant-agnostic: it owns no org
+        // column and reads none; the composing decorator stamps and fences the rows).
+        let company = Self::legacy_company_id()?;
+        let target = self
+            .resolver
+            .department_head_of(company, request.requested_by)
+            .await
+            .map_err(ApprovalsError::StepResolutionFailed)?;
+        if target == step.assigned_to {
+            return Err(ApprovalsError::StepResolutionFailed(
+                "the department head is already the assignee — nobody senior to escalate to".into(),
+            ));
+        }
+
+        let moved = self
+            .repo
+            .escalate_step(&mut tx, step.id, target, step.assigned_to, now)
+            .await?;
+        if !moved {
+            // A concurrent decision took the step out of pending mid-escalation;
+            // report the same convergence the decide path reports.
+            return Err(ApprovalsError::NotPending);
+        }
+        tx.commit().await?;
+        Ok(EscalatedStep {
+            request_id,
+            step_no,
+            escalated_from: step.assigned_to,
+            assigned_to: target,
+        })
+    }
+
     pub async fn withdraw(
         &self,
         request_id: Uuid,

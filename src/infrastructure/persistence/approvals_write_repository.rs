@@ -374,6 +374,42 @@ impl ApprovalsWriteRepository {
         Ok(result.rows_affected() > 0)
     }
 
+    /// Reassign a still-pending step to its escalation target, stamping the trace in
+    /// metadata the same way decided rows stamp updated_at. Returns whether the row
+    /// moved (a concurrent decision makes the reassignment moot — caller reports the
+    /// request's convergence, same rule as the decide path).
+    pub async fn escalate_step(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        step_id: uuid::Uuid,
+        new_assignee: uuid::Uuid,
+        was_assigned_to: uuid::Uuid,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            r#"UPDATE approvals.approval_steps SET
+                   assigned_to = $2,
+                   delegated_from = NULL,
+                   metadata = metadata || jsonb_build_object(
+                       'escalated_from', to_jsonb($3::text),
+                       'escalated_at', to_jsonb($4),
+                       'escalation_reason', 'sla_breach',
+                       'updated_at', to_jsonb($4)
+                   )
+               WHERE id = $1
+                 AND status = 'pending'
+                 AND assigned_to = $3
+                 AND (metadata->>'deleted_at') IS NULL"#,
+        )
+        .bind(step_id)
+        .bind(new_assignee)
+        .bind(was_assigned_to)
+        .bind(now)
+        .execute(&mut *conn)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
     /// Skip every other live pending step (`except`: the row that just decided, if any).
     /// The reject path and withdraw both funnel through here.
     pub async fn skip_other_pending_steps(

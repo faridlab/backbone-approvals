@@ -124,6 +124,12 @@ struct DecideBody {
     comment: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EscalateBody {
+    step_no: i32,
+}
+
 async fn decide(
     State(svc): State<Arc<ApprovalsWriteService>>,
     Path(request_id): Path<Uuid>,
@@ -201,6 +207,22 @@ struct CreateDelegationBody {
 /// Self-service delegation: the delegating approver is ALWAYS the token's `sub` —
 /// a body `approverId`, if a client sends one, is ignored (unknown fields never
 /// reach this handler). Delegation is consent; the principal cannot be forged.
+/// The SLA consequence, as a system action: reassign the breached current step to
+/// the requester's department head. No acting principal is claimed — escalation is
+/// driven by the breach, not by whoever happens to call — so this verb is immune to
+/// the user-vs-employee id space the decide verb's actor resolution trips on.
+async fn escalate(
+    State(svc): State<Arc<ApprovalsWriteService>>,
+    Path(request_id): Path<Uuid>,
+    _tenant: OrgContext,
+    Json(body): Json<EscalateBody>,
+) -> axum::response::Response {
+    match svc.escalate_overdue_step(request_id, body.step_no).await {
+        Ok(step) => (StatusCode::OK, Json(step)).into_response(),
+        Err(e) => err_response(e),
+    }
+}
+
 async fn create_delegation(
     State(svc): State<Arc<ApprovalsWriteService>>,
     tenant: OrgContext,
@@ -253,6 +275,7 @@ fn engine_verbs(svc: Arc<ApprovalsWriteService>) -> Router {
     Router::new()
         .route("/approvals/requests/:id", axum::routing::get(get_request))
         .route("/approvals/requests/:id/decide", post(decide))
+        .route("/approvals/requests/:id/escalate", post(escalate))
         .route("/approvals/requests/:id/withdraw", post(withdraw))
         .route("/approvals/delegations", post(create_delegation))
         .route("/approvals/delegations/:id/revoke", post(revoke_delegation))
