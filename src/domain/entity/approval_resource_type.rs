@@ -21,6 +21,7 @@ pub enum ApprovalResourceType {
     Custom,
     Expense,
     EmployeeRecord,
+    OvertimeRequest,
 }
 
 impl std::fmt::Display for ApprovalResourceType {
@@ -38,6 +39,7 @@ impl std::fmt::Display for ApprovalResourceType {
             Self::Custom => write!(f, "custom"),
             Self::Expense => write!(f, "expense"),
             Self::EmployeeRecord => write!(f, "employee_record"),
+            Self::OvertimeRequest => write!(f, "overtime_request"),
         }
     }
 }
@@ -59,6 +61,7 @@ impl FromStr for ApprovalResourceType {
             "custom" => Ok(Self::Custom),
             "expense" => Ok(Self::Expense),
             "employee_record" => Ok(Self::EmployeeRecord),
+            "overtime_request" => Ok(Self::OvertimeRequest),
             _ => Err(format!("Unknown ApprovalResourceType variant: {}", s)),
         }
     }
