@@ -110,9 +110,47 @@ impl From<&ApprovalRequest> for RequestBody {
     }
 }
 
-/// The acting principal as a uuid actor stamp, when the token's `sub` parses as one.
+/// How the guarded verbs resolve the acting principal to the EMPLOYEE id
+/// the engine's step rows carry. The default parses the token's `sub` as
+/// one — correct only where users and employees share an id space. A
+/// composition with separate spaces (the sub names a login identity, the
+/// employee row links to it) injects its own resolution via
+/// [`set_actor_resolver`]: the resolver receives the org context and
+/// answers the linked employee id, or None to refuse.
+pub trait ActorResolver: Send + Sync {
+    fn resolve(&self, ctx: &OrgContext) -> Option<Uuid>;
+}
+
+/// The default: `sub` parses as the employee id.
+pub struct SubAsEmployee;
+
+impl ActorResolver for SubAsEmployee {
+    fn resolve(&self, ctx: &OrgContext) -> Option<Uuid> {
+        Uuid::parse_str(&ctx.user_id).ok()
+    }
+}
+
+fn default_resolver() -> std::sync::Arc<dyn ActorResolver> {
+    std::sync::Arc::new(SubAsEmployee)
+}
+
+/// The composition-swappable actor resolution. Init is lazy and race-free:
+/// `get` builds the default exactly once (compare_exchange on whether a
+/// setter ran first); the setter stores unconditionally.
+static ACTOR_RESOLVER: std::sync::RwLock<Option<std::sync::Arc<dyn ActorResolver>>> =
+    std::sync::RwLock::new(None);
+
+/// Swap the actor resolution (composition time, before serving).
+pub fn set_actor_resolver(resolver: std::sync::Arc<dyn ActorResolver>) {
+    *ACTOR_RESOLVER.write().expect("actor resolver lock poisoned") = Some(resolver);
+}
+
 fn actor(t: &OrgContext) -> Option<Uuid> {
-    Uuid::parse_str(&t.user_id).ok()
+    let resolver = {
+        let read = ACTOR_RESOLVER.read().expect("actor resolver lock poisoned");
+        read.clone().unwrap_or_else(default_resolver)
+    };
+    resolver.resolve(t)
 }
 
 #[derive(Debug, Deserialize)]

@@ -16,7 +16,7 @@ pub mod delegation_handler;
 // Hand-authored (see metaphor.codegen.yaml user_owned).
 pub mod guarded_routes;
 pub use guarded_routes::{
-    create_guarded_approvals_routes, create_guarded_approvals_routes_with,
+    ActorResolver, SubAsEmployee, create_guarded_approvals_routes, create_guarded_approvals_routes_with, set_actor_resolver,
     create_operator_master_data_routes,
 };
 // END CUSTOM
