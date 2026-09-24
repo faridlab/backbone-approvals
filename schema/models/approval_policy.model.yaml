@@ -73,6 +73,8 @@ enums:
       - name: employee_record
       - name: overtime_request
       - name: resignation
+      - name: requisition
+      - name: attendance_correction
 
   - name: ApprovalPriority
     description: "Priority of an approval request (drives SLA / escalation)."
