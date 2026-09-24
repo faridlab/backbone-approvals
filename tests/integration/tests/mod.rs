@@ -13,7 +13,6 @@ pub mod approval_step_template_api_test;
 pub mod delegation_api_test;
 
 // Re-exports for convenience
-pub use crud_test_base::*;
 pub use approval_policy_api_test::*;
 pub use approval_request_api_test::*;
 pub use approval_step_api_test::*;

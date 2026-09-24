@@ -70,6 +70,9 @@ enums:
       - name: custom
         default: true
       - name: expense
+      - name: employee_record
+      - name: overtime_request
+      - name: resignation
 
   - name: ApprovalPriority
     description: "Priority of an approval request (drives SLA / escalation)."
