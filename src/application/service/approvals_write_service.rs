@@ -262,6 +262,18 @@ impl ApprovalsWriteService {
 
     /// Supply a resolver for the dynamic approver kinds (manager / department head / role /
     /// position). Without one, policies naming those kinds fail closed at file time.
+    /// Re-root this engine onto a request-scoped pool (ADR-0029 pool law):
+    /// the same resolver and wiring, a different database. Host adapters
+    /// call this per filing when the composing service's tenant router
+    /// resolved another pool for the request.
+    pub fn with_pool(&self, pool: PgPool) -> Self {
+        Self {
+            pool,
+            repo: ApprovalsWriteRepository,
+            resolver: self.resolver.clone(),
+        }
+    }
+
     pub fn with_resolver(mut self, resolver: Arc<dyn ApproverResolver>) -> Self {
         self.resolver = resolver;
         self
