@@ -26,6 +26,7 @@ pub enum ApprovalResourceType {
     Requisition,
     AttendanceCorrection,
     Discipline,
+    Contract,
 }
 
 impl std::fmt::Display for ApprovalResourceType {
@@ -48,6 +49,7 @@ impl std::fmt::Display for ApprovalResourceType {
             Self::Requisition => write!(f, "requisition"),
             Self::AttendanceCorrection => write!(f, "attendance_correction"),
             Self::Discipline => write!(f, "discipline"),
+            Self::Contract => write!(f, "contract"),
         }
     }
 }
@@ -74,6 +76,7 @@ impl FromStr for ApprovalResourceType {
             "requisition" => Ok(Self::Requisition),
             "attendance_correction" => Ok(Self::AttendanceCorrection),
             "discipline" => Ok(Self::Discipline),
+            "contract" => Ok(Self::Contract),
             _ => Err(format!("Unknown ApprovalResourceType variant: {}", s)),
         }
     }
