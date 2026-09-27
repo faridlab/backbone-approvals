@@ -252,6 +252,12 @@ pub struct ApprovalsWriteService {
 }
 
 impl ApprovalsWriteService {
+    /// The database this verb runs on: the composer's request pool when the
+    /// tenant router installed one, else the composed pool (ADR-0029 pool law).
+    fn rpool(&self) -> sqlx::PgPool {
+        crate::request_pool::current().unwrap_or_else(|| self.pool.clone())
+    }
+
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
@@ -300,7 +306,7 @@ impl ApprovalsWriteService {
         // the winner's row, or — if the winner's row was withdrawn in the same instant —
         // files a fresh one. Both outcomes are correct.
         for _ in 0..FILE_ATTEMPTS {
-            let mut tx = self.pool.begin().await?;
+            let mut tx = self.rpool().begin().await?;
             // Tenancy posture (ADR-0029): the module owns no scoping column — the composing
             // service's tenancy decorator does. Relay the AMBIENT request scope onto this
             // transaction when the caller bound one, so the decorator's org-unit fill (and
@@ -601,7 +607,7 @@ impl ApprovalsWriteService {
     /// Decide the current step. Authorization is engine-side; the reject path fails fast.
     pub async fn decide(&self, decision: Decision) -> Result<ApprovalStatus, ApprovalsError> {
         let now = Utc::now();
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // Tenancy posture (ADR-0029) — see `file`: relay the AMBIENT request scope when
         // the caller bound one; the decorator's fence scopes every statement below.
         if let Some(scope) = org_scope::current_org_scope() {
@@ -839,7 +845,7 @@ impl ApprovalsWriteService {
     /// The engine verdict for one request (consumer seams translate this into their own
     /// Verdict enums). Cross-tenant ids are 404s, never leakage.
     pub async fn status(&self, request_id: Uuid) -> Result<ApprovalStatus, ApprovalsError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // Tenancy posture (ADR-0029) — see `file`.
         if let Some(scope) = org_scope::current_org_scope() {
             org_scope::bind_org_scope_on(&mut tx, &scope).await?;
@@ -855,7 +861,7 @@ impl ApprovalsWriteService {
 
     /// The full request row (the guarded read surface uses this).
     pub async fn get_request(&self, request_id: Uuid) -> Result<ApprovalRequest, ApprovalsError> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // Tenancy posture (ADR-0029) — see `file`.
         if let Some(scope) = org_scope::current_org_scope() {
             org_scope::bind_org_scope_on(&mut tx, &scope).await?;
@@ -886,7 +892,7 @@ impl ApprovalsWriteService {
         step_no: i32,
     ) -> Result<EscalatedStep, ApprovalsError> {
         let now = chrono::Utc::now();
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         if let Some(scope) = org_scope::current_org_scope() {
             org_scope::bind_org_scope_on(&mut tx, &scope).await?;
         }
@@ -951,7 +957,7 @@ impl ApprovalsWriteService {
         actor: Uuid,
     ) -> Result<ApprovalStatus, ApprovalsError> {
         let now = Utc::now();
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // Tenancy posture (ADR-0029) — see `file`.
         if let Some(scope) = org_scope::current_org_scope() {
             org_scope::bind_org_scope_on(&mut tx, &scope).await?;
@@ -1002,7 +1008,7 @@ impl ApprovalsWriteService {
             return Err(ApprovalsError::DelegationWindowInvalid);
         }
         let id = Uuid::new_v4();
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // Tenancy posture (ADR-0029) — see `file`.
         if let Some(scope) = org_scope::current_org_scope() {
             org_scope::bind_org_scope_on(&mut tx, &scope).await?;
@@ -1024,7 +1030,7 @@ impl ApprovalsWriteService {
         approver: Uuid,
     ) -> Result<(), ApprovalsError> {
         let now = Utc::now();
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.rpool().begin().await?;
         // Tenancy posture (ADR-0029) — see `file`.
         if let Some(scope) = org_scope::current_org_scope() {
             org_scope::bind_org_scope_on(&mut tx, &scope).await?;
