@@ -12,7 +12,8 @@
 //!   with delegation stamping `delegated_from` (the authority source, never the
 //!   decider);
 //! - idempotent filing including the concurrent loser (23505 → same live request);
-//! - withdraw frees the per-resource unique for a fresh chain;
+//! - withdraw frees the per-resource unique for a fresh chain, and so does a rejection,
+//!   while a pending or approved request keeps holding its resource;
 //! - dynamic approver kinds fail closed without a resolver (422);
 //! - the DB contracts the module itself carries: one live template per (policy,
 //!   step_no).
@@ -1100,6 +1101,69 @@ async fn withdraw_then_refile_files_a_fresh_chain() {
     assert_ne!(refiled.request_id, outcome.request_id);
     assert_eq!(refiled.verdict, ApprovalStatus::Pending);
     assert_eq!(count_steps(&pool, refiled.request_id).await, 1);
+}
+
+// ─── 10b: a rejection frees the resource; pending and approved keep holding it ──
+
+#[tokio::test]
+async fn reject_then_refile_files_a_fresh_chain() {
+    let (_sequential, pool) = pool().await;
+    let employee = Uuid::new_v4();
+    let approver = Uuid::new_v4();
+    let policy = seed_policy(&pool, "leave").await;
+    seed_template(&pool, policy, 1, "specific_employee", Some(approver), None).await;
+    let svc = Arc::new(engine(&pool));
+
+    let resource = Uuid::new_v4();
+    let first = svc.file(filing(resource, employee)).await.unwrap();
+    assert_eq!(first.verdict, ApprovalStatus::Pending);
+
+    // A pending request still holds the resource: a re-file converges on it.
+    let again = svc.file(filing(resource, employee)).await.unwrap();
+    assert!(again.already_filed);
+    assert_eq!(again.request_id, first.request_id);
+    assert_eq!(again.verdict, ApprovalStatus::Pending);
+
+    let verdict = svc
+        .decide(decide_as(first.request_id, 1, approver, false))
+        .await
+        .unwrap();
+    assert_eq!(verdict, ApprovalStatus::Rejected);
+
+    // The rejected request no longer holds the resource: sending the same resource
+    // again files a FRESH pending chain an approver can decide — and concurrent
+    // re-sends still converge on that one new request.
+    let (o1, o2, o3, o4) = tokio::join!(
+        svc.file(filing(resource, employee)),
+        svc.file(filing(resource, employee)),
+        svc.file(filing(resource, employee)),
+        svc.file(filing(resource, employee)),
+    );
+    let outcomes = [o1.unwrap(), o2.unwrap(), o3.unwrap(), o4.unwrap()];
+    let ids: std::collections::HashSet<Uuid> = outcomes.iter().map(|o| o.request_id).collect();
+    assert_eq!(ids.len(), 1, "every re-send lands on one new request");
+    let refiled = outcomes[0].request_id;
+    assert_ne!(refiled, first.request_id, "a rejected request is never handed back");
+    assert!(outcomes.iter().any(|o| !o.already_filed), "one re-send created the row");
+    assert!(outcomes.iter().all(|o| o.verdict == ApprovalStatus::Pending));
+    assert_eq!(count_steps(&pool, refiled).await, 1, "the fresh chain materialized once");
+
+    // The old request keeps its verdict as history.
+    assert_eq!(
+        svc.status(first.request_id).await.unwrap(),
+        ApprovalStatus::Rejected
+    );
+
+    // An approved request keeps holding the resource: a re-file converges on it.
+    let verdict = svc
+        .decide(decide_as(refiled, 1, approver, true))
+        .await
+        .unwrap();
+    assert_eq!(verdict, ApprovalStatus::Approved);
+    let after = svc.file(filing(resource, employee)).await.unwrap();
+    assert!(after.already_filed);
+    assert_eq!(after.request_id, refiled);
+    assert_eq!(after.verdict, ApprovalStatus::Approved);
 }
 
 // ─── 11: dynamic kinds fail closed without a resolver ────────────────────────

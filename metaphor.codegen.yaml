@@ -25,5 +25,10 @@ user_owned:
   - "migrations/20260911061000_strip_company_tenancy.up.sql"
   - "migrations/20260911061000_strip_company_tenancy.down.sql"
 
+  # Hand-authored migration: the per-resource partial unique index releases a
+  # resource once its request is rejected, withdrawn or cancelled.
+  - "migrations/20261004090000_rejected_request_frees_resource.up.sql"
+  - "migrations/20261004090000_rejected_request_frees_resource.down.sql"
+
   # Hand-authored module documentation.
   - "docs/**"

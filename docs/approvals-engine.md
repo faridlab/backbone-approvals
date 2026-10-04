@@ -9,19 +9,37 @@ engine owns every state change after that.
 
 | Verb | Meaning |
 |---|---|
-| `file` | Link a resource to a chain (or a pre-approved verdict). Idempotent per resource. |
+| `file` | Link a resource to a chain (or a pre-approved verdict). Idempotent per resource while its request is pending or approved. |
 | `status` | Read the live verdict for a resource. |
 | `decide` | Approve/reject one step as an authorized actor. |
-| `withdraw` | Requester-only cancellation; frees the resource for a re-file. |
+| `withdraw` | Requester-only cancellation; frees the resource for a re-file (a rejection frees it too). |
 | `delegate` | Self-service: an approver grants a delegate their authority for a window. |
 | `revoke` | Self-service: the delegating approver ends that window. |
 
 ## Filing semantics
 
-- **Idempotency first.** A live request row for `(company, resource_type,
-  resource_id)` is returned as-is (`already_filed: true`). The concurrent loser
-  of the partial-unique race catches `23505`, re-selects, and returns the
-  existing request — retries always converge on the same request id.
+- **Idempotency first.** A request that still holds the resource — one for the
+  same `(resource_type, resource_id)` that is **pending or approved** and not
+  soft-deleted — is returned as-is (`already_filed: true`, with its current
+  verdict). The concurrent loser of the partial-unique race catches `23505`,
+  re-selects, and returns the existing request — retries always converge on
+  the same request id.
+- **A refused request does not hold the resource.** A request that was
+  **rejected**, **withdrawn** or **cancelled** is history: filing the same
+  resource again creates a fresh request (a new pending chain, or a
+  pre-approved verdict when no policy is active) and leaves the old row and
+  its verdict untouched. This is what lets a consumer send a record back after
+  an approver refused it — a timesheet month, an expense, a correction — and
+  have it reach an approver again. The partial unique index
+  `approval_requests_one_live_per_resource` carries the same predicate
+  (`deleted_at` unset and status not rejected, withdrawn or cancelled), so a
+  resource has at most one such holding request but may keep any number of
+  refused ones beside it.
+- **Consumers must not read the verdict from `file`.** Because a refused
+  request is never handed back, `already_filed: true` only ever carries a
+  pending or approved verdict. A consumer that needs to know whether its
+  earlier request was refused reads it by id through `status`, not by
+  re-filing.
 - **No active policy → PRE-APPROVED, zero steps.** Tenants without a policy for
   the resource type behave exactly as they would without approvals wired: the
   verdict is immediate and positive. Policies are how a tenant opts into
@@ -98,9 +116,26 @@ engine owns every state change after that.
 
 ## Withdrawal
 
-Requester-only. Marks the request `withdrawn` AND stamps `deleted_at` in
-`metadata` — the soft-delete is what frees the per-resource partial unique, so
-the consumer's re-submit files a fresh chain.
+Requester-only, and only while the request is still pending. Marks the request
+`withdrawn` AND stamps `deleted_at` in `metadata`, so the consumer's re-submit
+files a fresh chain.
+
+Withdrawal is not the only way a resource is freed. The per-resource partial
+unique index, and the lookup `file` uses to find an existing request, hold a
+resource only while its request is pending or approved:
+
+| Request status | Holds the resource? | A re-file of the same resource… |
+|---|---|---|
+| `pending` | yes | returns this request (`already_filed: true`) |
+| `approved` | yes | returns this request (`already_filed: true`) |
+| `rejected` | no | files a fresh request |
+| `withdrawn` | no (also soft-deleted) | files a fresh request |
+| `cancelled` | no | files a fresh request |
+| `draft` | yes | returns this request; the engine never writes this status |
+
+A rejection therefore needs no withdraw before the consumer sends the record
+again: the requester fixes what the approver refused and re-submits, and a new
+chain reaches the approvers.
 
 ## Delegation is self-service
 

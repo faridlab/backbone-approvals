@@ -24,7 +24,13 @@ pub struct ApprovalsWriteRepository;
 impl ApprovalsWriteRepository {
     // ── requests: reads ─────────────────────────────────────────────────────
 
-    /// The LIVE request for one resource (the idempotency probe of `file`).
+    /// The request that still holds one resource (the idempotency probe of `file`).
+    ///
+    /// Only a pending or approved request holds its resource. A rejected, withdrawn or
+    /// cancelled one is history: it is left out here, so sending the same resource again
+    /// files a fresh request instead of handing back the refused one. The predicate
+    /// matches the partial unique index `approval_requests_one_live_per_resource`
+    /// exactly, which keeps at most one holding request per resource.
     pub async fn find_live_request(
         &self,
         conn: &mut sqlx::PgConnection,
@@ -34,7 +40,8 @@ impl ApprovalsWriteRepository {
         sqlx::query_as::<_, ApprovalRequest>(
             r#"SELECT * FROM approvals.approval_requests
                 WHERE resource_type = $1 AND resource_id = $2
-                  AND (metadata->>'deleted_at') IS NULL"#,
+                  AND (metadata->>'deleted_at') IS NULL
+                  AND status NOT IN ('rejected', 'withdrawn', 'cancelled')"#,
         )
         .bind(resource_type)
         .bind(resource_id)

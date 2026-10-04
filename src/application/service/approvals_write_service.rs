@@ -67,7 +67,8 @@ pub struct FilingOutcome {
     pub request_id: Uuid,
     /// `pending` under a policy; `approved` for the no-policy pre-approved posture.
     pub verdict: ApprovalStatus,
-    /// true when a live request already existed and was returned as-is.
+    /// true when a request already held the resource and was returned as-is. Only a
+    /// pending or approved request holds one, so a returned request is never refused.
     pub already_filed: bool,
 }
 
@@ -295,8 +296,11 @@ impl ApprovalsWriteService {
             .ok_or(ApprovalsError::NoCompanyScope)
     }
 
-    /// File (or return the already-live) approval request for one resource. Idempotent;
-    /// the concurrent-filing loser of the partial-unique race re-selects the winner's row.
+    /// File (or return the already-live) approval request for one resource. Idempotent
+    /// while that request is pending or approved; the concurrent-filing loser of the
+    /// partial-unique race re-selects the winner's row. A rejected, withdrawn or cancelled
+    /// request no longer holds the resource, so filing it again creates a fresh request
+    /// and never hands the refused one back.
     pub async fn file(&self, filing: FileFiling) -> Result<FilingOutcome, ApprovalsError> {
         let now = Utc::now();
 
