@@ -163,6 +163,8 @@ impl ApprovalsModule {
 /// Builder for ApprovalsModule
 pub struct ApprovalsModuleBuilder {
     db_pool: Option<PgPool>,
+    // <<< CUSTOM BUILDER FIELDS
+    // END CUSTOM
 }
 
 impl ApprovalsModuleBuilder {
@@ -170,6 +172,8 @@ impl ApprovalsModuleBuilder {
     pub fn new() -> Self {
         Self {
             db_pool: None,
+            // <<< CUSTOM BUILDER DEFAULTS
+            // END CUSTOM
         }
     }
 

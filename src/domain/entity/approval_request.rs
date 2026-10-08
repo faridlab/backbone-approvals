@@ -289,6 +289,8 @@ impl backbone_orm::EntityRepoMeta for ApprovalRequest {
         m.insert("resource_type".to_string(), "approval_resource_type".to_string());
         m.insert("status".to_string(), "approval_status".to_string());
         m.insert("priority".to_string(), "approval_priority".to_string());
+        m.insert("submitted_at".to_string(), "timestamptz".to_string());
+        m.insert("decided_at".to_string(), "timestamptz".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {

@@ -275,6 +275,8 @@ impl backbone_orm::EntityRepoMeta for ApprovalStep {
         m.insert("request_id".to_string(), "uuid".to_string());
         m.insert("approver_kind".to_string(), "approver_kind".to_string());
         m.insert("status".to_string(), "approval_step_status".to_string());
+        m.insert("acted_at".to_string(), "timestamptz".to_string());
+        m.insert("sla_due_at".to_string(), "timestamptz".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {

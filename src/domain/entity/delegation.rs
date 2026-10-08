@@ -230,6 +230,8 @@ impl backbone_orm::EntityRepoMeta for Delegation {
         m.insert("approver_id".to_string(), "uuid".to_string());
         m.insert("delegate_to_id".to_string(), "uuid".to_string());
         m.insert("status".to_string(), "delegation_status".to_string());
+        m.insert("valid_from".to_string(), "date".to_string());
+        m.insert("valid_to".to_string(), "date".to_string());
         m
     }
     fn search_fields() -> &'static [&'static str] {
