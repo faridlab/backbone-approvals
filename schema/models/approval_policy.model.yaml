@@ -75,6 +75,8 @@ enums:
       - name: resignation
       - name: requisition
       - name: attendance_correction
+      - name: discipline
+      - name: contract
 
   - name: ApprovalPriority
     description: "Priority of an approval request (drives SLA / escalation)."
