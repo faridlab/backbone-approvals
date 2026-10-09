@@ -225,7 +225,7 @@ async fn withdraw(
 async fn get_request(
     State(svc): State<Arc<ApprovalsWriteService>>,
     Path(request_id): Path<Uuid>,
-    tenant: OrgContext,
+    _tenant: OrgContext,
 ) -> axum::response::Response {
     match svc.get_request(request_id).await {
         Ok(r) => request_response(StatusCode::OK, &r),
