@@ -89,6 +89,66 @@ impl ApprovalsWriteRepository {
         .await
     }
 
+    /// Whether a live policy with this id exists (any status: an inactive policy's chain may
+    /// still be prepared before it is switched on).
+    pub async fn policy_exists(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        policy_id: Uuid,
+    ) -> Result<bool, sqlx::Error> {
+        sqlx::query_scalar::<_, bool>(
+            r#"SELECT EXISTS (SELECT 1 FROM approvals.approval_policies
+                               WHERE id = $1 AND (metadata->>'deleted_at') IS NULL)"#,
+        )
+        .bind(policy_id)
+        .fetch_one(&mut *conn)
+        .await
+    }
+
+    /// Retire every live template of a policy (soft delete), freeing the per-policy step
+    /// numbers for a replacement chain written in the same transaction.
+    pub async fn retire_templates(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        policy_id: Uuid,
+    ) -> Result<u64, sqlx::Error> {
+        sqlx::query(
+            r#"UPDATE approvals.approval_step_templates
+                  SET metadata = jsonb_set(jsonb_set(metadata, '{deleted_at}', to_jsonb(now())),
+                                           '{updated_at}', to_jsonb(now()))
+                WHERE policy_id = $1 AND (metadata->>'deleted_at') IS NULL"#,
+        )
+        .bind(policy_id)
+        .execute(&mut *conn)
+        .await
+        .map(|r| r.rows_affected())
+    }
+
+    /// Insert one step template of a chain.
+    pub async fn insert_template(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        t: &ApprovalStepTemplate,
+    ) -> Result<ApprovalStepTemplate, sqlx::Error> {
+        sqlx::query_as::<_, ApprovalStepTemplate>(
+            r#"INSERT INTO approvals.approval_step_templates
+                 (id, policy_id, step_no, approver_kind, approver_ref, sla_hours, all_of, metadata)
+               VALUES ($1, $2, $3, $4, $5, $6, $7,
+                       '{"created_by":null,"updated_by":null,"deleted_at":null,"deleted_by":null}'::jsonb
+                       || jsonb_build_object('created_at', now(), 'updated_at', now()))
+               RETURNING *"#,
+        )
+        .bind(t.id)
+        .bind(t.policy_id)
+        .bind(t.step_no)
+        .bind(t.approver_kind)
+        .bind(t.approver_ref)
+        .bind(t.sla_hours)
+        .bind(&t.all_of)
+        .fetch_one(&mut *conn)
+        .await
+    }
+
     /// The chain templates of a policy, in step order.
     pub async fn templates_for_policy(
         &self,

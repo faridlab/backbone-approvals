@@ -21,6 +21,9 @@ pub use approvals_write_service::{
     ApprovalsError, ApprovalsWriteService, ApproverActor, ApproverResolver, Decision,
     FailClosedResolver, FileFiling, FilingOutcome,
 };
+// A policy's chain written and previewed whole, never row by row.
+pub mod approval_chain_service;
+pub use approval_chain_service::{check_chain, ChainStep, PreviewApprover, StepPreview};
 // END CUSTOM
 
 pub use approval_policy_service::ApprovalPolicyService;

@@ -40,6 +40,7 @@ use backbone_auth::org::OrgContext;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::application::service::approval_chain_service::ChainStep;
 use crate::application::service::approvals_write_service::{
     ApprovalsError, ApprovalsWriteService, ApproverActor, Decision,
 };
@@ -359,6 +360,62 @@ pub fn create_operator_master_data_routes(m: &ApprovalsModule) -> Router {
         .merge(create_approval_step_template_routes(
             m.approval_step_template_service.clone(),
         ))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChainBody {
+    steps: Vec<ChainStep>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PreviewBody {
+    requester_id: Uuid,
+    /// A proposed chain; absent previews the saved one.
+    #[serde(default)]
+    steps: Option<Vec<ChainStep>>,
+}
+
+async fn replace_chain(
+    State(svc): State<Arc<ApprovalsWriteService>>,
+    Path(policy_id): Path<Uuid>,
+    Json(body): Json<ChainBody>,
+) -> axum::response::Response {
+    match svc.replace_chain(policy_id, body.steps).await {
+        Ok(rows) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "policyId": policy_id, "steps": rows })),
+        )
+            .into_response(),
+        Err(e) => err_response(e),
+    }
+}
+
+async fn preview_chain(
+    State(svc): State<Arc<ApprovalsWriteService>>,
+    Path(policy_id): Path<Uuid>,
+    Json(body): Json<PreviewBody>,
+) -> axum::response::Response {
+    match svc
+        .preview_chain(policy_id, body.steps, body.requester_id)
+        .await
+    {
+        Ok(steps) => (StatusCode::OK, Json(serde_json::json!({ "steps": steps }))).into_response(),
+        Err(e) => err_response(e),
+    }
+}
+
+/// A policy's chain as one thing: `PUT /approvals/policies/:id/chain` replaces the whole
+/// chain atomically, `POST /approvals/policies/:id/chain/preview` says who each step of
+/// it (or of a proposed one) resolves to for a requester. Writing a chain is writing the
+/// engine's authorization data, exactly like the template CRUD: a host MUST mount this
+/// behind the same operator gate, never bare.
+pub fn create_chain_routes(svc: Arc<ApprovalsWriteService>) -> Router {
+    Router::new()
+        .route("/approvals/policies/:id/chain", axum::routing::put(replace_chain))
+        .route("/approvals/policies/:id/chain/preview", post(preview_chain))
+        .with_state(svc)
 }
 
 /// Convenience for hosts that build their own engine (e.g. with a resolver): the same

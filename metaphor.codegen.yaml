@@ -15,6 +15,9 @@ user_owned:
   - "src/application/service/approvals_write_service.rs"
   - "src/infrastructure/persistence/approvals_write_repository.rs"
   - "src/presentation/http/guarded_routes.rs"
+  # A policy's chain written and previewed whole (the atomic chain verbs).
+  - "src/application/service/approval_chain_service.rs"
+  - "tests/chain_verbs.rs"
 
   # Behavior tests (the golden cases / oracle) + BDD features.
   - "tests/features/**"

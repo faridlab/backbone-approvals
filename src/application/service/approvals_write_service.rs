@@ -239,23 +239,23 @@ impl ApprovalsError {
 const FILE_ATTEMPTS: usize = 5;
 
 /// One materialized member of a step (before delegation is applied).
-struct ResolvedMember {
-    approver_kind: ApproverKind,
-    approver_ref: Option<Uuid>,
-    assigned_to: Uuid,
+pub(crate) struct ResolvedMember {
+    pub(crate) approver_kind: ApproverKind,
+    pub(crate) approver_ref: Option<Uuid>,
+    pub(crate) assigned_to: Uuid,
 }
 
 #[derive(Clone)]
 pub struct ApprovalsWriteService {
     pool: PgPool,
-    repo: ApprovalsWriteRepository,
+    pub(crate) repo: ApprovalsWriteRepository,
     resolver: Arc<dyn ApproverResolver>,
 }
 
 impl ApprovalsWriteService {
     /// The database this verb runs on: the composer's request pool when the
     /// tenant router installed one, else the composed pool (ADR-0029 pool law).
-    fn rpool(&self) -> sqlx::PgPool {
+    pub(crate) fn rpool(&self) -> sqlx::PgPool {
         crate::request_pool::current().unwrap_or_else(|| self.pool.clone())
     }
 
@@ -433,7 +433,7 @@ impl ApprovalsWriteService {
     }
 
     /// Resolve one template into its concrete member rows (a quorum template yields many).
-    async fn resolve_members(
+    pub(crate) async fn resolve_members(
         &self,
         template: &crate::domain::entity::ApprovalStepTemplate,
         requester: Uuid,
@@ -596,7 +596,7 @@ impl ApprovalsWriteService {
     /// authority it inherited. Resolution happens once, at file time — a delegation created
     /// AFTER the chain materialized does not re-route existing step rows (see
     /// docs/approvals-engine.md).
-    async fn apply_delegation(
+    pub(crate) async fn apply_delegation(
         &self,
         conn: &mut sqlx::PgConnection,
         approver: Uuid,
