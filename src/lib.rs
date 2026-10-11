@@ -25,8 +25,17 @@ pub mod presentation;
 pub mod seeders;
 pub mod exports;
 // <<< CUSTOM MODULES
-pub mod request_pool;
 // END CUSTOM
+
+// The module's extension (hand-written; ADR-0031).
+#[path = "lib.ext.rs"]
+mod lib_ext;
+pub use lib_ext::*;
+/// This crate's module and builder under fixed names, for the extension's `impl` blocks.
+#[allow(dead_code)]
+pub(crate) type ThisModule = ApprovalsModule;
+#[allow(dead_code)]
+pub(crate) type ThisModuleBuilder = ApprovalsModuleBuilder;
 
 // Re-exports for convenience - Domain entities
 pub use domain::entity::*;
@@ -44,14 +53,6 @@ pub use application::service::DelegationService;
 // Re-exports - Workflows
 pub use application::workflows::*;
 
-// <<< CUSTOM
-// The guarded composition (engine verbs + reads) and the operator master-data
-// composer a host mounts behind its own RBAC gate.
-pub use presentation::http::guarded_routes::{
-    create_guarded_approvals_routes, create_guarded_approvals_routes_with,
-    create_operator_master_data_routes,
-};
-// END CUSTOM
 use std::sync::Arc;
 use axum::Router;
 use sqlx::PgPool;
@@ -74,11 +75,39 @@ pub struct ApprovalsModule {
     pub(crate) approval_step_service: Arc<ApprovalStepService>,
     pub(crate) approval_step_template_service: Arc<ApprovalStepTemplateService>,
     pub(crate) delegation_service: Arc<DelegationService>,
+    /// The module's extension state (`lib.ext.rs`); its fields read through `Deref`.
+    pub(crate) ext: ModuleExt,
     // <<< CUSTOM FIELDS
-    // The decision engine (file/decide/status/withdraw). Default resolver is fail-closed:
-    // dynamic approver kinds need the host to supply one at composition time.
-    pub(crate) approvals_write_service: Arc<application::service::ApprovalsWriteService>,
     // END CUSTOM
+}
+
+impl std::ops::Deref for ApprovalsModule {
+    type Target = ModuleExt;
+    fn deref(&self) -> &Self::Target {
+        &self.ext
+    }
+}
+
+impl std::ops::DerefMut for ApprovalsModule {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ext
+    }
+}
+
+/// What the extension's `build` hook receives from the generated build (ADR-0031).
+#[allow(dead_code)]
+pub(crate) struct ModuleParts<'a> {
+    pub(crate) db_pool: &'a PgPool,
+    pub(crate) approval_policy_service: &'a Arc<ApprovalPolicyService>,
+    pub(crate) approval_policy_repository: &'a Arc<ApprovalPolicyRepository>,
+    pub(crate) approval_request_service: &'a Arc<ApprovalRequestService>,
+    pub(crate) approval_request_repository: &'a Arc<ApprovalRequestRepository>,
+    pub(crate) approval_step_service: &'a Arc<ApprovalStepService>,
+    pub(crate) approval_step_repository: &'a Arc<ApprovalStepRepository>,
+    pub(crate) approval_step_template_service: &'a Arc<ApprovalStepTemplateService>,
+    pub(crate) approval_step_template_repository: &'a Arc<ApprovalStepTemplateRepository>,
+    pub(crate) delegation_service: &'a Arc<DelegationService>,
+    pub(crate) delegation_repository: &'a Arc<DelegationRepository>,
 }
 
 impl ApprovalsModule {
@@ -142,29 +171,29 @@ impl ApprovalsModule {
     }
 
     // <<< CUSTOM METHODS
-    /// The decision engine held by this module (default fail-closed resolver).
-    pub fn approvals_write_service(&self) -> Arc<application::service::ApprovalsWriteService> {
-        self.approvals_write_service.clone()
-    }
-
-    /// Replace the engine at the composition root — the way a host supplies a real
-    /// approver resolver for the dynamic kinds. Call before mounting routes; the module is
-    /// consumed once at startup.
-    pub fn with_approvals_write_service(
-        mut self,
-        svc: Arc<application::service::ApprovalsWriteService>,
-    ) -> Self {
-        self.approvals_write_service = svc;
-        self
-    }
     // END CUSTOM
 }
 
 /// Builder for ApprovalsModule
 pub struct ApprovalsModuleBuilder {
     db_pool: Option<PgPool>,
+    /// The builder's extension state (`lib.ext.rs`); its fields read through `Deref`.
+    ext: ModuleBuilderExt,
     // <<< CUSTOM BUILDER FIELDS
     // END CUSTOM
+}
+
+impl std::ops::Deref for ApprovalsModuleBuilder {
+    type Target = ModuleBuilderExt;
+    fn deref(&self) -> &Self::Target {
+        &self.ext
+    }
+}
+
+impl std::ops::DerefMut for ApprovalsModuleBuilder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ext
+    }
 }
 
 impl ApprovalsModuleBuilder {
@@ -172,6 +201,7 @@ impl ApprovalsModuleBuilder {
     pub fn new() -> Self {
         Self {
             db_pool: None,
+            ext: Default::default(),
             // <<< CUSTOM BUILDER DEFAULTS
             // END CUSTOM
         }
@@ -212,10 +242,22 @@ impl ApprovalsModuleBuilder {
         let delegation_service = Arc::new(DelegationService::with_repository(delegation_repository.clone()));
 
         // <<< CUSTOM
-        let approvals_write_service = Arc::new(application::service::ApprovalsWriteService::new(
-            db_pool.clone(),
-        ));
         // END CUSTOM
+
+        // The extension builds its own state from what the generated build made.
+        let ext = self.ext.build(&ModuleParts {
+            db_pool: &db_pool,
+            approval_policy_service: &approval_policy_service,
+            approval_policy_repository: &approval_policy_repository,
+            approval_request_service: &approval_request_service,
+            approval_request_repository: &approval_request_repository,
+            approval_step_service: &approval_step_service,
+            approval_step_repository: &approval_step_repository,
+            approval_step_template_service: &approval_step_template_service,
+            approval_step_template_repository: &approval_step_template_repository,
+            delegation_service: &delegation_service,
+            delegation_repository: &delegation_repository,
+        })?;
 
         Ok(ApprovalsModule {
             approval_policy_service,
@@ -223,8 +265,8 @@ impl ApprovalsModuleBuilder {
             approval_step_service,
             approval_step_template_service,
             delegation_service,
+            ext,
             // <<< CUSTOM
-            approvals_write_service,
             // END CUSTOM
         })
     }
@@ -235,3 +277,6 @@ impl Default for ApprovalsModuleBuilder {
         Self::new()
     }
 }
+
+// This directory's extension (hand-written; ADR-0031).
+include!("mod.ext.rs");

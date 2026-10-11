@@ -12,9 +12,6 @@ mod delegation_repository;
 
 // Custom persistence modules
 // <<< CUSTOM
-// The decision engine's statements (hand-authored; see metaphor.codegen.yaml user_owned).
-pub mod approvals_write_repository;
-pub use approvals_write_repository::ApprovalsWriteRepository;
 // END CUSTOM
 
 // Re-exports
@@ -34,3 +31,6 @@ pub use backbone_orm::repository::{
 // Re-export custom persistence types
 // <<< CUSTOM
 // END CUSTOM
+
+// This directory's extension (hand-written; ADR-0031).
+include!("mod.ext.rs");

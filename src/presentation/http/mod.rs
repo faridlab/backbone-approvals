@@ -12,13 +12,6 @@ pub mod approval_step_template_handler;
 pub mod delegation_handler;
 
 // <<< CUSTOM
-// The guarded composition (operator CRUD + engine reads + decide/withdraw verbs).
-// Hand-authored (see metaphor.codegen.yaml user_owned).
-pub mod guarded_routes;
-pub use guarded_routes::{
-    ActorResolver, SubAsEmployee, create_guarded_approvals_routes, create_guarded_approvals_routes_with, set_actor_resolver,
-    create_operator_master_data_routes,
-};
 // END CUSTOM
 
 // Re-exports
@@ -29,3 +22,6 @@ pub use approval_step_template_handler::{create_approval_step_template_routes, c
 pub use delegation_handler::{create_delegation_routes, create_delegation_read_routes, create_delegation_write_routes};
 // <<< CUSTOM
 // END CUSTOM
+
+// This directory's extension (hand-written; ADR-0031).
+include!("mod.ext.rs");
