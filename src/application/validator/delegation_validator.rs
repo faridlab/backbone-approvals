@@ -16,9 +16,5 @@ pub type DelegationValidator = EntityValidator<Delegation>;
 pub fn delegation_validator() -> DelegationValidator {
     EntityValidator::new()
         .rule(OptionalNotBlank::new("reason", |e: &Delegation| e.reason.as_deref()))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

@@ -289,7 +289,7 @@ impl backbone_core::ApplyUpdateDto<UpdateDelegationDto> for Delegation {
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to Delegation here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

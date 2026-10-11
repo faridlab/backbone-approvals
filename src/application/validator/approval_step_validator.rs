@@ -16,9 +16,5 @@ pub type ApprovalStepValidator = EntityValidator<ApprovalStep>;
 pub fn approval_step_validator() -> ApprovalStepValidator {
     EntityValidator::new()
         .rule(OptionalNotBlank::new("comment", |e: &ApprovalStep| e.comment.as_deref()))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

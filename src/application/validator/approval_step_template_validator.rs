@@ -14,10 +14,6 @@ pub type ApprovalStepTemplateValidator = EntityValidator<ApprovalStepTemplate>;
 /// Build a validator for ApprovalStepTemplate with all schema-defined field rules.
 pub fn approval_step_template_validator() -> ApprovalStepTemplateValidator {
     EntityValidator::new()
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
         // No schema-derived rules — add custom rules above.
 }
 
-// <<< CUSTOM
-// END CUSTOM

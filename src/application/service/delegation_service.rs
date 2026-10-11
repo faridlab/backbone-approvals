@@ -32,5 +32,3 @@ pub type DelegationService = GenericCrudService<
     DelegationRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

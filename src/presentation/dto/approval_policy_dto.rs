@@ -254,7 +254,7 @@ impl backbone_core::ApplyUpdateDto<UpdateApprovalPolicyDto> for ApprovalPolicy {
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to ApprovalPolicy here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

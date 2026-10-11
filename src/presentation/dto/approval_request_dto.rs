@@ -336,7 +336,7 @@ impl backbone_core::ApplyUpdateDto<UpdateApprovalRequestDto> for ApprovalRequest
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to ApprovalRequest here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

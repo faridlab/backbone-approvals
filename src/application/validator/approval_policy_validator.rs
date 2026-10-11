@@ -17,9 +17,5 @@ pub fn approval_policy_validator() -> ApprovalPolicyValidator {
     EntityValidator::new()
         .rule(RequiredString::new("name", |e: &ApprovalPolicy| &e.name))
         .rule(OptionalNotBlank::new("description", |e: &ApprovalPolicy| e.description.as_deref()))
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
 }
 
-// <<< CUSTOM
-// END CUSTOM

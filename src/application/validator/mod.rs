@@ -17,5 +17,3 @@ pub use approval_step_validator::{ApprovalStepValidator, approval_step_validator
 pub use approval_step_template_validator::{ApprovalStepTemplateValidator, approval_step_template_validator};
 pub use delegation_validator::{DelegationValidator, delegation_validator};
 
-// <<< CUSTOM
-// END CUSTOM

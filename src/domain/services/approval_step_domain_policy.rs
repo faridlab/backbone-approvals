@@ -18,5 +18,3 @@ use crate::domain::entity::ApprovalStep;
 /// service. `PermitAllPolicy` is the safe default until then.
 pub type ApprovalStepDomainPolicy = PermitAllPolicy<ApprovalStep>;
 
-// <<< CUSTOM
-// END CUSTOM

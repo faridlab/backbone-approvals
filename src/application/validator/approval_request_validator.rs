@@ -14,10 +14,6 @@ pub type ApprovalRequestValidator = EntityValidator<ApprovalRequest>;
 /// Build a validator for ApprovalRequest with all schema-defined field rules.
 pub fn approval_request_validator() -> ApprovalRequestValidator {
     EntityValidator::new()
-    // <<< CUSTOM RULES
-    // END CUSTOM RULES
         // No schema-derived rules — add custom rules above.
 }
 
-// <<< CUSTOM
-// END CUSTOM

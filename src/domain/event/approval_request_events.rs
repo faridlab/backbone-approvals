@@ -11,8 +11,6 @@ use crate::domain::entity::ApprovalRequest;
 /// enum containing a `Crud(CrudEvent<ApprovalRequest>)` variant.
 pub type ApprovalRequestEvent = CrudEvent<ApprovalRequest>;
 
-// <<< CUSTOM
-// END CUSTOM
 
 use backbone_messaging::{CrudEventPublisher, NoOpCrudEventPublisher};
 use std::sync::Arc;

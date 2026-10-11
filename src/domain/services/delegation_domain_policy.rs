@@ -18,5 +18,3 @@ use crate::domain::entity::Delegation;
 /// service. `PermitAllPolicy` is the safe default until then.
 pub type DelegationDomainPolicy = PermitAllPolicy<Delegation>;
 
-// <<< CUSTOM
-// END CUSTOM

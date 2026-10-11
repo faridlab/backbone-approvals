@@ -12,5 +12,3 @@ pub mod approval_step_specification;
 pub mod approval_step_template_specification;
 pub mod delegation_specification;
 
-// <<< CUSTOM
-// END CUSTOM

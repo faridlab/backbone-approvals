@@ -11,8 +11,6 @@ use crate::domain::entity::Delegation;
 /// enum containing a `Crud(CrudEvent<Delegation>)` variant.
 pub type DelegationEvent = CrudEvent<Delegation>;
 
-// <<< CUSTOM
-// END CUSTOM
 
 use backbone_messaging::{CrudEventPublisher, NoOpCrudEventPublisher};
 use std::sync::Arc;

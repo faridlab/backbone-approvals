@@ -32,5 +32,3 @@ pub type ApprovalRequestService = GenericCrudService<
     ApprovalRequestRepository,
 >;
 
-// <<< CUSTOM
-// END CUSTOM

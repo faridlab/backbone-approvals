@@ -13,16 +13,12 @@ pub mod approval_step_service;
 pub mod approval_step_template_service;
 pub mod delegation_service;
 
-// <<< CUSTOM
-// END CUSTOM
 
 pub use approval_policy_service::ApprovalPolicyService;
 pub use approval_request_service::ApprovalRequestService;
 pub use approval_step_service::ApprovalStepService;
 pub use approval_step_template_service::ApprovalStepTemplateService;
 pub use delegation_service::DelegationService;
-// <<< CUSTOM
-// END CUSTOM
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

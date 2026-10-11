@@ -14,5 +14,3 @@ pub use approval_step_domain_policy::ApprovalStepDomainPolicy;
 pub use approval_step_template_domain_policy::ApprovalStepTemplateDomainPolicy;
 pub use delegation_domain_policy::DelegationDomainPolicy;
 
-// <<< CUSTOM
-// END CUSTOM

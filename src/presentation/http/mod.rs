@@ -11,8 +11,6 @@ pub mod approval_step_handler;
 pub mod approval_step_template_handler;
 pub mod delegation_handler;
 
-// <<< CUSTOM
-// END CUSTOM
 
 // Re-exports
 pub use approval_policy_handler::{create_approval_policy_routes, create_approval_policy_read_routes, create_approval_policy_write_routes};
@@ -20,8 +18,6 @@ pub use approval_request_handler::{create_approval_request_routes, create_approv
 pub use approval_step_handler::{create_approval_step_routes, create_approval_step_read_routes, create_approval_step_write_routes};
 pub use approval_step_template_handler::{create_approval_step_template_routes, create_approval_step_template_read_routes, create_approval_step_template_write_routes};
 pub use delegation_handler::{create_delegation_routes, create_delegation_read_routes, create_delegation_write_routes};
-// <<< CUSTOM
-// END CUSTOM
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

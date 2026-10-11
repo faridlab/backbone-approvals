@@ -11,8 +11,6 @@ mod approval_step_template_repository;
 mod delegation_repository;
 
 // Custom persistence modules
-// <<< CUSTOM
-// END CUSTOM
 
 // Re-exports
 pub use approval_policy_repository::ApprovalPolicyRepository;
@@ -29,8 +27,6 @@ pub use backbone_orm::repository::{
 };
 
 // Re-export custom persistence types
-// <<< CUSTOM
-// END CUSTOM
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

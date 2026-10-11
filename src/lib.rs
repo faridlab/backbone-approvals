@@ -24,8 +24,6 @@ pub mod application;
 pub mod presentation;
 pub mod seeders;
 pub mod exports;
-// <<< CUSTOM MODULES
-// END CUSTOM
 
 // The module's extension (hand-written; ADR-0031).
 #[path = "lib.ext.rs"]
@@ -77,8 +75,6 @@ pub struct ApprovalsModule {
     pub(crate) delegation_service: Arc<DelegationService>,
     /// The module's extension state (`lib.ext.rs`); its fields read through `Deref`.
     pub(crate) ext: ModuleExt,
-    // <<< CUSTOM FIELDS
-    // END CUSTOM
 }
 
 impl std::ops::Deref for ApprovalsModule {
@@ -170,8 +166,6 @@ impl ApprovalsModule {
             .merge(create_delegation_read_routes(self.delegation_service.clone()))
     }
 
-    // <<< CUSTOM METHODS
-    // END CUSTOM
 }
 
 /// Builder for ApprovalsModule
@@ -179,8 +173,6 @@ pub struct ApprovalsModuleBuilder {
     db_pool: Option<PgPool>,
     /// The builder's extension state (`lib.ext.rs`); its fields read through `Deref`.
     ext: ModuleBuilderExt,
-    // <<< CUSTOM BUILDER FIELDS
-    // END CUSTOM
 }
 
 impl std::ops::Deref for ApprovalsModuleBuilder {
@@ -202,8 +194,6 @@ impl ApprovalsModuleBuilder {
         Self {
             db_pool: None,
             ext: Default::default(),
-            // <<< CUSTOM BUILDER DEFAULTS
-            // END CUSTOM
         }
     }
 
@@ -213,8 +203,6 @@ impl ApprovalsModuleBuilder {
         self
     }
 
-    // <<< CUSTOM - custom builder methods
-    // END CUSTOM
 
     /// Build the module with configured dependencies
     pub fn build(self) -> anyhow::Result<ApprovalsModule> {
@@ -241,8 +229,6 @@ impl ApprovalsModuleBuilder {
         let delegation_repository = Arc::new(DelegationRepository::new(db_pool.clone()));
         let delegation_service = Arc::new(DelegationService::with_repository(delegation_repository.clone()));
 
-        // <<< CUSTOM
-        // END CUSTOM
 
         // The extension builds its own state from what the generated build made.
         let ext = self.ext.build(&ModuleParts {
@@ -266,8 +252,6 @@ impl ApprovalsModuleBuilder {
             approval_step_template_service,
             delegation_service,
             ext,
-            // <<< CUSTOM
-            // END CUSTOM
         })
     }
 }

@@ -330,7 +330,7 @@ impl backbone_core::ApplyUpdateDto<UpdateApprovalStepDto> for ApprovalStep {
 // Custom DTOs
 // =============================================================================
 
-// <<< CUSTOM DTOs
 // Add custom DTOs specific to ApprovalStep here.
 // This section will be preserved during regeneration.
 // >>> END CUSTOM DTOs
+

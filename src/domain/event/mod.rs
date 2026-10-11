@@ -24,5 +24,3 @@ pub use approval_step_template_event_handlers::ApprovalStepTemplateEventHandler;
 pub use delegation_events::{DelegationEvent, DelegationEventPublisher, NoopDelegationEventPublisher};
 pub use delegation_event_handlers::DelegationEventHandler;
 
-// <<< CUSTOM
-// END CUSTOM
