@@ -280,6 +280,9 @@ impl backbone_orm::EntityRepoMeta for ApprovalStep {
     fn search_fields() -> &'static [&'static str] {
         &[]
     }
+    fn relations() -> &'static [(&'static str, &'static str, &'static str)] {
+        &[("request", "approval_requests", "requestId")]
+    }
 }
 
 /// Builder for ApprovalStep entity
