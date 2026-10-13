@@ -32,3 +32,45 @@ pub type ApprovalStepService = GenericCrudService<
     ApprovalStepRepository,
 >;
 
+/// The rules the schema declares for ApprovalStep, checked against the row a create or update
+/// would store. The generated build attaches it to [`ApprovalStepService`]. A refusing rule's
+/// break answers 422; a rule in shadow is logged under `backbone::write_guard` and the
+/// write goes ahead.
+pub struct ApprovalStepRowRules;
+
+#[async_trait::async_trait]
+impl backbone_core::write_guard::WriteGuard<ApprovalStep> for ApprovalStepRowRules {
+    async fn check(
+        &self,
+        ctx: &backbone_core::write_guard::WriteCtx<'_, ApprovalStep>,
+    ) -> backbone_core::write_guard::GuardOutcome {
+        use backbone_core::row_rule as r;
+        use backbone_core::violation::Violation;
+        use backbone_core::write_guard::{GuardOutcome, WriteKind};
+        let (create, update) = (ctx.kind == WriteKind::Create, ctx.kind == WriteKind::Update);
+        let Some(after) = ctx.after.filter(|_| create || update) else {
+            return GuardOutcome::allow();
+        };
+        let Ok(row) = serde_json::to_value(after) else {
+            return GuardOutcome::allow();
+        };
+        let row = &row;
+        let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
+        let mut shadow = Vec::new();
+        let mut refuse = Vec::new();
+        // `request_id_required` (@required on ApprovalStep.request_id)
+        if (create || (update && r::changed(old.as_ref(), row, &["request_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "request_id")), r::not(r::is_empty(r::trim(r::field(row, "request_id")))))) {
+            refuse.push(Violation::new("request_id", "required", "request_id is required"));
+        }
+        // `assigned_to_required` (@required on ApprovalStep.assigned_to)
+        if (create || (update && r::changed(old.as_ref(), row, &["assigned_to"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "assigned_to")), r::not(r::is_empty(r::trim(r::field(row, "assigned_to")))))) {
+            refuse.push(Violation::new("assigned_to", "required", "assigned_to is required"));
+        }
+        // `comment_max_length` (@length(max=500) on ApprovalStep.comment)
+        if (create || (update && r::changed(old.as_ref(), row, &["comment"]))) && !r::holds(&r::le(r::length(r::field(row, "comment")), r::Val::Num(500.0_f64))) {
+            shadow.push(Violation::new("comment", "max_length", "comment must be at most 500 characters").with_param("max", 500_i64));
+        }
+        GuardOutcome { refuse, shadow }
+    }
+}
+

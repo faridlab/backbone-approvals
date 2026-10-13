@@ -19,6 +19,11 @@ pub use approval_request_service::ApprovalRequestService;
 pub use approval_step_service::ApprovalStepService;
 pub use approval_step_template_service::ApprovalStepTemplateService;
 pub use delegation_service::DelegationService;
+pub use approval_policy_service::ApprovalPolicyRowRules;
+pub use approval_request_service::ApprovalRequestRowRules;
+pub use approval_step_service::ApprovalStepRowRules;
+pub use approval_step_template_service::ApprovalStepTemplateRowRules;
+pub use delegation_service::DelegationRowRules;
 
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

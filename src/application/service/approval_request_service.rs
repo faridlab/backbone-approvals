@@ -32,3 +32,41 @@ pub type ApprovalRequestService = GenericCrudService<
     ApprovalRequestRepository,
 >;
 
+/// The rules the schema declares for ApprovalRequest, checked against the row a create or update
+/// would store. The generated build attaches it to [`ApprovalRequestService`]. A refusing rule's
+/// break answers 422; a rule in shadow is logged under `backbone::write_guard` and the
+/// write goes ahead.
+pub struct ApprovalRequestRowRules;
+
+#[async_trait::async_trait]
+impl backbone_core::write_guard::WriteGuard<ApprovalRequest> for ApprovalRequestRowRules {
+    async fn check(
+        &self,
+        ctx: &backbone_core::write_guard::WriteCtx<'_, ApprovalRequest>,
+    ) -> backbone_core::write_guard::GuardOutcome {
+        use backbone_core::row_rule as r;
+        use backbone_core::violation::Violation;
+        use backbone_core::write_guard::{GuardOutcome, WriteKind};
+        let (create, update) = (ctx.kind == WriteKind::Create, ctx.kind == WriteKind::Update);
+        let Some(after) = ctx.after.filter(|_| create || update) else {
+            return GuardOutcome::allow();
+        };
+        let Ok(row) = serde_json::to_value(after) else {
+            return GuardOutcome::allow();
+        };
+        let row = &row;
+        let old = ctx.before.and_then(|b| serde_json::to_value(b).ok());
+        let shadow = Vec::new();
+        let mut refuse = Vec::new();
+        // `resource_id_required` (@required on ApprovalRequest.resource_id)
+        if (create || (update && r::changed(old.as_ref(), row, &["resource_id"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "resource_id")), r::not(r::is_empty(r::trim(r::field(row, "resource_id")))))) {
+            refuse.push(Violation::new("resource_id", "required", "resource_id is required"));
+        }
+        // `requested_by_required` (@required on ApprovalRequest.requested_by)
+        if (create || (update && r::changed(old.as_ref(), row, &["requested_by"]))) && !r::holds(&r::and(r::is_not_null(r::field(row, "requested_by")), r::not(r::is_empty(r::trim(r::field(row, "requested_by")))))) {
+            refuse.push(Violation::new("requested_by", "required", "requested_by is required"));
+        }
+        GuardOutcome { refuse, shadow }
+    }
+}
+
