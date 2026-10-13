@@ -1,0 +1,13 @@
+-- Down: drop the declared rule constraints for approvals module
+ALTER TABLE IF EXISTS approvals.delegations DROP CONSTRAINT IF EXISTS ck_delegations_reason_max_length__max_length;
+ALTER TABLE IF EXISTS approvals.delegations DROP CONSTRAINT IF EXISTS ck_delegations_delegate_to_id_required__required;
+ALTER TABLE IF EXISTS approvals.delegations DROP CONSTRAINT IF EXISTS ck_delegations_approver_id_required__required;
+ALTER TABLE IF EXISTS approvals.approval_step_templates DROP CONSTRAINT IF EXISTS ck_approval_step_templates_policy_id_required__required;
+ALTER TABLE IF EXISTS approvals.approval_steps DROP CONSTRAINT IF EXISTS ck_approval_steps_comment_max_length__max_length;
+ALTER TABLE IF EXISTS approvals.approval_steps DROP CONSTRAINT IF EXISTS ck_approval_steps_assigned_to_required__required;
+ALTER TABLE IF EXISTS approvals.approval_steps DROP CONSTRAINT IF EXISTS ck_approval_steps_request_id_required__required;
+ALTER TABLE IF EXISTS approvals.approval_requests DROP CONSTRAINT IF EXISTS ck_approval_requests_requested_by_required__required;
+ALTER TABLE IF EXISTS approvals.approval_requests DROP CONSTRAINT IF EXISTS ck_approval_requests_resource_id_required__required;
+ALTER TABLE IF EXISTS approvals.approval_policies DROP CONSTRAINT IF EXISTS ck_approval_policies_description_max_length__max_length;
+ALTER TABLE IF EXISTS approvals.approval_policies DROP CONSTRAINT IF EXISTS ck_approval_policies_name_max_length__max_length;
+ALTER TABLE IF EXISTS approvals.approval_policies DROP CONSTRAINT IF EXISTS ck_approval_policies_name_required__required;

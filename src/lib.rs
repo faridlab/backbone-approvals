@@ -48,9 +48,6 @@ pub use application::service::ApprovalStepService;
 pub use application::service::ApprovalStepTemplateService;
 pub use application::service::DelegationService;
 
-// Re-exports - Workflows
-pub use application::workflows::*;
-
 use std::sync::Arc;
 use axum::Router;
 use sqlx::PgPool;
