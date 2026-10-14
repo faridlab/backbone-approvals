@@ -25,5 +25,45 @@ pub use approval_step_service::ApprovalStepRowRules;
 pub use approval_step_template_service::ApprovalStepTemplateRowRules;
 pub use delegation_service::DelegationRowRules;
 
+/// A `ApprovalPolicyService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_approval_policy_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::ApprovalPolicyRepository>,
+) -> ApprovalPolicyService {
+    ApprovalPolicyService::with_repository(repository).with_guard(std::sync::Arc::new(ApprovalPolicyRowRules))
+}
+
+/// A `ApprovalRequestService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_approval_request_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::ApprovalRequestRepository>,
+) -> ApprovalRequestService {
+    ApprovalRequestService::with_repository(repository).with_guard(std::sync::Arc::new(ApprovalRequestRowRules))
+}
+
+/// A `ApprovalStepService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_approval_step_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::ApprovalStepRepository>,
+) -> ApprovalStepService {
+    ApprovalStepService::with_repository(repository).with_guard(std::sync::Arc::new(ApprovalStepRowRules))
+}
+
+/// A `ApprovalStepTemplateService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_approval_step_template_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::ApprovalStepTemplateRepository>,
+) -> ApprovalStepTemplateService {
+    ApprovalStepTemplateService::with_repository(repository).with_guard(std::sync::Arc::new(ApprovalStepTemplateRowRules))
+}
+
+/// A `DelegationService` over `repository` with its write guard attached: the way to build it, so its writes are
+/// served only with the rules the schema declares.
+pub fn build_delegation_service(
+    repository: std::sync::Arc<crate::infrastructure::persistence::DelegationRepository>,
+) -> DelegationService {
+    DelegationService::with_repository(repository).with_guard(std::sync::Arc::new(DelegationRowRules))
+}
+
 // This directory's extension (hand-written; ADR-0031).
 include!("mod.ext.rs");

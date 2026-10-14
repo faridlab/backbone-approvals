@@ -208,23 +208,23 @@ impl ApprovalsModuleBuilder {
 
         // ApprovalPolicy service
         let approval_policy_repository = Arc::new(ApprovalPolicyRepository::new(db_pool.clone()));
-        let approval_policy_service = Arc::new(ApprovalPolicyService::with_repository(approval_policy_repository.clone()).with_guard(Arc::new(crate::application::service::ApprovalPolicyRowRules)));
+        let approval_policy_service = Arc::new(crate::application::service::build_approval_policy_service(approval_policy_repository.clone()));
 
         // ApprovalRequest service
         let approval_request_repository = Arc::new(ApprovalRequestRepository::new(db_pool.clone()));
-        let approval_request_service = Arc::new(ApprovalRequestService::with_repository(approval_request_repository.clone()).with_guard(Arc::new(crate::application::service::ApprovalRequestRowRules)));
+        let approval_request_service = Arc::new(crate::application::service::build_approval_request_service(approval_request_repository.clone()));
 
         // ApprovalStep service
         let approval_step_repository = Arc::new(ApprovalStepRepository::new(db_pool.clone()));
-        let approval_step_service = Arc::new(ApprovalStepService::with_repository(approval_step_repository.clone()).with_guard(Arc::new(crate::application::service::ApprovalStepRowRules)));
+        let approval_step_service = Arc::new(crate::application::service::build_approval_step_service(approval_step_repository.clone()));
 
         // ApprovalStepTemplate service
         let approval_step_template_repository = Arc::new(ApprovalStepTemplateRepository::new(db_pool.clone()));
-        let approval_step_template_service = Arc::new(ApprovalStepTemplateService::with_repository(approval_step_template_repository.clone()).with_guard(Arc::new(crate::application::service::ApprovalStepTemplateRowRules)));
+        let approval_step_template_service = Arc::new(crate::application::service::build_approval_step_template_service(approval_step_template_repository.clone()));
 
         // Delegation service
         let delegation_repository = Arc::new(DelegationRepository::new(db_pool.clone()));
-        let delegation_service = Arc::new(DelegationService::with_repository(delegation_repository.clone()).with_guard(Arc::new(crate::application::service::DelegationRowRules)));
+        let delegation_service = Arc::new(crate::application::service::build_delegation_service(delegation_repository.clone()));
 
 
         // The extension builds its own state from what the generated build made.
